@@ -497,8 +497,8 @@ void CodeGenFunction::GenerateCXXGlobalVarDeclInitFunc(llvm::Function *Fn,
                                                  llvm::GlobalVariable *Addr,
                                                        bool PerformInit) {
   // Check if we need to emit debug info for variable initializer.
-  if (D->hasAttr<NoDebugAttr>())
-    DebugInfo = nullptr; // disable debug info indefinitely for this function
+//  if (D->hasAttr<NoDebugAttr>())
+//    DebugInfo = nullptr; // disable debug info indefinitely for this function
 
   CurEHLocation = D->getLocStart();
 

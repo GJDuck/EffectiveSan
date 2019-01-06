@@ -1304,6 +1304,9 @@ private:
   /// Check whether we can use a "simpler", more core exceptions personality
   /// function.
   void SimplifyPersonality();
+
+  // Attach EffectiveSan argument metadata.
+  void GenEffectiveSanArgs(const CGFunctionInfo &FI, llvm::Function *F);
 };
 }  // end namespace CodeGen
 }  // end namespace clang

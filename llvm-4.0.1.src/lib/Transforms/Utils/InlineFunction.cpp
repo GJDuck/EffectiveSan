@@ -1263,7 +1263,13 @@ static Value *HandleByValArgument(Value *Arg, Instruction *TheCall,
   Value *NewAlloca = new AllocaInst(AggTy, nullptr, Align, Arg->getName(), 
                                     &*Caller->begin()->begin());
   IFI.StaticAllocas.push_back(cast<AllocaInst>(NewAlloca));
-  
+
+  // EFFECTIVESAN copy type
+  DIType *Ty = getEffectiveSanType(Arg);
+  auto *I = dyn_cast<Instruction>(NewAlloca);
+  if (Ty != nullptr && I != nullptr)
+    I->setMetadata("effectiveSan", Ty);
+
   // Uses of the argument in the function should use our new alloca
   // instead.
   return NewAlloca;

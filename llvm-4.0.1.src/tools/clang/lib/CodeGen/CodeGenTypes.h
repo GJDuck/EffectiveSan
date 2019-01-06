@@ -162,6 +162,9 @@ class CodeGenTypes {
   /// corresponding llvm::Type.
   llvm::DenseMap<const Type *, llvm::Type *> TypeCache;
 
+  /// Map llvm::PointerTypes to clang::Types for EffectiveSan.
+  llvm::DenseMap<llvm::Type *, QualType> EffectiveSanCache;
+
   llvm::SmallSet<const Type *, 8> RecordsWithOpaqueMemberPointers;
 
   unsigned ClangCallConvToLLVMCallConv(CallingConv CC);
@@ -181,6 +184,9 @@ public:
 
   /// ConvertType - Convert type T into a llvm::Type.
   llvm::Type *ConvertType(QualType T);
+
+  /// UnconvertPointerType - Unconvert an llvm::Type (for EffectiveSan).
+  QualType UnconvertType(llvm::Type *Ty);
 
   /// \brief Converts the GlobalDecl into an llvm::Type. This should be used
   /// when we know the target of the function we want to convert.  This is

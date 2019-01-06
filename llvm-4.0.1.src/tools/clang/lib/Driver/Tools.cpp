@@ -3340,6 +3340,8 @@ collectSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   }
   if (SanArgs.needsEsanRt())
     StaticRuntimes.push_back("esan");
+  if (SanArgs.needsEffsanRt())
+    StaticRuntimes.push_back("effective");
 }
 
 // Should be called before we add system libraries (C++ ABI, libstdc++/libc++,
@@ -3376,6 +3378,17 @@ static bool addSanitizerRuntimes(const ToolChain &TC, const ArgList &Args,
   const SanitizerArgs &SanArgs = TC.getSanitizerArgs();
   if (SanArgs.hasCrossDsoCfi() && !AddExportDynamic)
     CmdArgs.push_back("-export-dynamic-symbol=__cfi_check");
+
+  if (SanArgs.needsEffsanRt()) {
+    // Use the special LowFat linker script for globals.
+    CmdArgs.push_back("-T");
+    CmdArgs.push_back("LowFat/lowfat.ld");
+    // This works around a bug (?) where ld defaults to 2MB page sizes for
+    // custom sections, leading to very large executables.  The following
+    // forces 4KB page sizes:
+    CmdArgs.push_back("-z");
+    CmdArgs.push_back("max-page-size=0x1000");
+  }
 
   return !StaticRuntimes.empty();
 }

@@ -639,7 +639,8 @@ static llvm::Value *EmitCXXNewAllocSize(CodeGenFunction &CGF,
                                         const CXXNewExpr *e,
                                         unsigned minElements,
                                         llvm::Value *&numElements,
-                                        llvm::Value *&sizeWithoutCookie) {
+                                        llvm::Value *&sizeWithoutCookie,
+                                        size_t &cookieSz) {
   QualType type = e->getAllocatedType();
 
   if (!e->isArray()) {
@@ -655,6 +656,7 @@ static llvm::Value *EmitCXXNewAllocSize(CodeGenFunction &CGF,
   // Figure out the cookie size.
   llvm::APInt cookieSize(sizeWidth,
                          CalculateCookiePadding(CGF, e).getQuantity());
+  cookieSz = cookieSize.getZExtValue();
 
   // Emit the array size expression.
   // We multiply the size of all dimensions for NumElements.
@@ -1494,9 +1496,10 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(const CXXNewExpr *E) {
 
   llvm::Value *numElements = nullptr;
   llvm::Value *allocSizeWithoutCookie = nullptr;
+  size_t cookieSize = 0;
   llvm::Value *allocSize =
     EmitCXXNewAllocSize(*this, E, minElements, numElements,
-                        allocSizeWithoutCookie);
+                        allocSizeWithoutCookie, cookieSize);
   CharUnits allocAlign = getContext().getTypeAlignInChars(allocType);
 
   // Emit the allocation call.  If the allocator is a global placement
@@ -1581,6 +1584,21 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(const CXXNewExpr *E) {
     allocation = Address(RV.getScalarVal(), allocationAlign);
   }
 
+  llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+    getContext().getPointerType(allocType), SourceLocation());
+  llvm::Value *Ptr = allocation.getPointer();
+  if (auto *I = llvm::dyn_cast<llvm::Instruction>(Ptr)) {
+    I->setMetadata("effectiveSan", DITy);
+    if (cookieSize != 0) {
+      llvm::ConstantAsMetadata *MDCookieData =
+        llvm::ConstantAsMetadata::get(llvm::ConstantInt::get(SizeTy,
+                                                             cookieSize));
+      llvm::MDNode *MDCookieNode = llvm::MDNode::get(CGM.getLLVMContext(),
+        {MDCookieData});
+      I->setMetadata("effectiveSanCookieSize", MDCookieNode);
+    }
+  }
+
   // Emit a null check on the allocation result if the allocation
   // function is allowed to return null (because it has a non-throwing
   // exception spec or is the reserved placement new) and we have an
@@ -1631,6 +1649,7 @@ llvm::Value *CodeGenFunction::EmitCXXNewExpr(const CXXNewExpr *E) {
 
   llvm::Type *elementTy = ConvertTypeForMem(allocType);
   Address result = Builder.CreateElementBitCast(allocation, elementTy);
+  EmitEffectiveSanMetaData(result.getPointer(), allocType, false);
 
   // Passing pointer through invariant.group.barrier to avoid propagation of
   // vptrs information which may be included in previous type.

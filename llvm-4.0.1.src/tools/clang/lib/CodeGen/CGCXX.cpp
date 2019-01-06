@@ -232,6 +232,7 @@ llvm::Function *CodeGenModule::codegenCXXStructor(const CXXMethodDecl *MD,
   setFunctionDLLStorageClass(GD, Fn);
 
   CodeGenFunction(*this).GenerateCode(GD, Fn, FnInfo);
+  GenEffectiveSanArgs(FnInfo, Fn);
   setFunctionDefinitionAttributes(MD, Fn);
   SetLLVMFunctionAttributesForDefinition(MD, Fn);
   return Fn;

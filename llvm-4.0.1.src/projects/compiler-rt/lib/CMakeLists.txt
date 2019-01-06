@@ -4,6 +4,8 @@
 include(AddCompilerRT)
 include(SanitizerUtils)
 
+add_subdirectory(effective)
+
 # Hoist the building of sanitizer_common on whether we're building either the
 # sanitizers or xray (or both).
 #
@@ -53,6 +55,7 @@ if(COMPILER_RT_BUILD_SANITIZERS)
   compiler_rt_build_sanitizer(cfi)
   compiler_rt_build_sanitizer(esan)
   compiler_rt_build_sanitizer(scudo)
+  compiler_rt_build_sanitizer(effective)
 
   compiler_rt_build_runtime(profile)
 endif()

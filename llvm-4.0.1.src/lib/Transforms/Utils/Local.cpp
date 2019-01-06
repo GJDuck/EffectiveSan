@@ -1448,6 +1448,9 @@ BasicBlock *llvm::changeToInvokeAndSplitBasicBlock(CallInst *CI,
   II->setDebugLoc(CI->getDebugLoc());
   II->setCallingConv(CI->getCallingConv());
   II->setAttributes(CI->getAttributes());
+  DIType *Ty = getEffectiveSanType(CI);     // EFFECTIVESAN
+  if (Ty != nullptr)
+    II->setMetadata("effectiveSan", Ty);
 
   // Make sure that anything using the call now uses the invoke!  This also
   // updates the CallGraph if present, because it uses a WeakVH.
@@ -1742,6 +1745,11 @@ void llvm::combineMetadata(Instruction *K, const Instruction *J,
   if (auto *JMD = J->getMetadata(LLVMContext::MD_invariant_group))
     if (isa<LoadInst>(K) || isa<StoreInst>(K))
       K->setMetadata(LLVMContext::MD_invariant_group, JMD);
+
+  // EFFECTIVESAN
+  auto *Ty = getEffectiveSanType(J);
+  if (Ty)
+    K->setMetadata("effectiveSan", Ty);
 }
 
 void llvm::combineMetadataForCSE(Instruction *K, const Instruction *J) {
@@ -2074,3 +2082,4 @@ void llvm::maybeMarkSanitizerLibraryCallNoBuiltin(
       !F->doesNotAccessMemory())
     CI->addAttribute(AttributeSet::FunctionIndex, Attribute::NoBuiltin);
 }
+

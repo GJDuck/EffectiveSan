@@ -38,6 +38,7 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/ValueTracking.h"
 #include "llvm/IR/DataLayout.h"
+#include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/Dominators.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/IRBuilder.h"
@@ -1607,6 +1608,11 @@ bool GVN::PerformLoadPRE(LoadInst *LI, AvailValInBlkVect &ValuesPerBlock,
       NewLoad->setMetadata(LLVMContext::MD_invariant_group, InvGroupMD);
     if (auto *RangeMD = LI->getMetadata(LLVMContext::MD_range))
       NewLoad->setMetadata(LLVMContext::MD_range, RangeMD);
+
+    // EFFECTIVESAN
+    auto *Ty = getEffectiveSanType(LI);
+    if (Ty)
+      NewLoad->setMetadata("effectiveSan", Ty);
 
     // We do not propagate the old load's debug location, because the new
     // load now lives in a different BB, and we want to avoid a jumpy line

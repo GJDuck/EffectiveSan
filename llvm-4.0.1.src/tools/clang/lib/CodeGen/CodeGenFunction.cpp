@@ -1073,8 +1073,8 @@ void CodeGenFunction::GenerateCode(GlobalDecl GD, llvm::Function *Fn,
   QualType ResTy = BuildFunctionArgList(GD, Args);
 
   // Check if we should generate debug info for this function.
-  if (FD->hasAttr<NoDebugAttr>())
-    DebugInfo = nullptr; // disable debug info indefinitely for this function
+//  if (FD->hasAttr<NoDebugAttr>())
+//    DebugInfo = nullptr; // disable debug info indefinitely for this function
 
   SourceRange BodyRange;
   if (Stmt *Body = FD->getBody()) BodyRange = Body->getSourceRange();
@@ -2015,6 +2015,16 @@ void CodeGenFunction::InsertHelper(llvm::Instruction *I,
                                    const llvm::Twine &Name,
                                    llvm::BasicBlock *BB,
                                    llvm::BasicBlock::iterator InsertPt) const {
+  
+  if (auto *Cast = llvm::dyn_cast<llvm::BitCastInst>(I)) {
+    QualType Ty = getTypes().UnconvertType(Cast->getDestTy());
+    EmitEffectiveSanMetaData(Cast, Ty);
+  }
+  else if (auto *Load = llvm::dyn_cast<llvm::LoadInst>(I)) {
+    QualType Ty = getTypes().UnconvertType(Load->getType());
+    EmitEffectiveSanMetaData(Load, Ty);
+  }
+  
   LoopStack.InsertHelper(I);
   if (IsSanitizerScope)
     CGM.getSanitizerMetadata()->disableSanitizerForInstruction(I);

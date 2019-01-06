@@ -1377,6 +1377,11 @@ public:
   }
 };
 
+/// EFFECTIVESAN
+/// Get the type annotation for a given value, else return null if it does
+/// not exist.
+DIType *getEffectiveSanType(const llvm::Value *Ptr);
+
 } // end namespace llvm
 
 #endif // LLVM_IR_METADATA_H

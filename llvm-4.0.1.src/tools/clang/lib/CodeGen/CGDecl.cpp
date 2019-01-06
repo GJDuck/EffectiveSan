@@ -232,6 +232,9 @@ llvm::Constant *CodeGenModule::getOrCreateStaticVarDecl(
                              Init, Name, nullptr,
                              llvm::GlobalVariable::NotThreadLocal,
                              AddrSpace);
+  llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+     getContext().getPointerType(Ty), SourceLocation());
+  GV->setMetadata("effectiveSan", DITy);
   GV->setAlignment(getContext().getDeclAlign(&D).getQuantity());
   setGlobalVisibility(GV, &D);
 
@@ -1010,7 +1013,7 @@ CodeGenFunction::EmitAutoVarAlloca(const VarDecl &D) {
       // Create the alloca.  Note that we set the name separately from
       // building the instruction so that it's there even in no-asserts
       // builds.
-      address = CreateTempAlloca(allocaTy, allocaAlignment);
+      address = CreateTempAlloca(allocaTy, allocaAlignment, "", &Ty);
       address.getPointer()->setName(D.getName());
 
       // Don't emit lifetime markers for MSVC catch parameters. The lifetime of
@@ -1245,6 +1248,9 @@ void CodeGenFunction::EmitAutoVarInit(const AutoVarEmission &emission) {
                                llvm::GlobalValue::NotThreadLocal, AS);
     GV->setAlignment(Loc.getAlignment().getQuantity());
     GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+    llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+      getContext().getPointerType(type), SourceLocation());
+    GV->setMetadata("effectiveSan", DITy);
 
     Address SrcPtr = Address(GV, Loc.getAlignment());
     if (SrcPtr.getType() != BP)

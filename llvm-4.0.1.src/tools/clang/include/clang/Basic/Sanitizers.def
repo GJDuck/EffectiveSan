@@ -37,6 +37,8 @@
 #define SANITIZER_GROUP(NAME, ID, ALIAS)
 #endif
 
+// EffectiveSan
+SANITIZER("effective", Effective)
 
 // AddressSanitizer
 SANITIZER("address", Address)

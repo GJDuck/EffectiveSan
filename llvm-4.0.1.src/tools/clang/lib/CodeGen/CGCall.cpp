@@ -17,6 +17,7 @@
 #include "CGBlocks.h"
 #include "CGCXXABI.h"
 #include "CGCleanup.h"
+#include "CGRecordLayout.h"
 #include "CodeGenFunction.h"
 #include "CodeGenModule.h"
 #include "TargetInfo.h"
@@ -1140,13 +1141,17 @@ static llvm::Value *CoerceIntOrPtrToIntOrPtr(llvm::Value *Val,
 /// This safely handles the case when the src type is smaller than the
 /// destination type; in this situation the values of bits which not
 /// present in the src are undefined.
-static llvm::Value *CreateCoercedLoad(Address Src, llvm::Type *Ty,
+static llvm::Value *CreateCoercedLoad(Address Src, QualType Ty0, llvm::Type *Ty,
                                       CodeGenFunction &CGF) {
+  llvm::DIType *DITy = CGF.getDebugInfo()->getOrCreateStandaloneType(Ty0,
+    SourceLocation());
   llvm::Type *SrcTy = Src.getElementType();
 
   // If SrcTy and Ty are the same, just do a load.
-  if (SrcTy == Ty)
-    return CGF.Builder.CreateLoad(Src);
+  if (SrcTy == Ty) {
+    llvm::LoadInst *Load = CGF.Builder.CreateLoad(Src);
+    Load->setMetadata("effectiveSan", DITy);
+  }
 
   uint64_t DstSize = CGF.CGM.getDataLayout().getTypeAllocSize(Ty);
 
@@ -1161,7 +1166,8 @@ static llvm::Value *CreateCoercedLoad(Address Src, llvm::Type *Ty,
   // extension or truncation to the desired type.
   if ((isa<llvm::IntegerType>(Ty) || isa<llvm::PointerType>(Ty)) &&
       (isa<llvm::IntegerType>(SrcTy) || isa<llvm::PointerType>(SrcTy))) {
-    llvm::Value *Load = CGF.Builder.CreateLoad(Src);
+    llvm::LoadInst *Load = CGF.Builder.CreateLoad(Src);
+    Load->setMetadata("effectiveSan", DITy);
     return CoerceIntOrPtrToIntOrPtr(Load, Ty, CGF);
   }
 
@@ -1174,17 +1180,25 @@ static llvm::Value *CreateCoercedLoad(Address Src, llvm::Type *Ty,
     // FIXME: Assert that we aren't truncating non-padding bits when have access
     // to that information.
     Src = CGF.Builder.CreateBitCast(Src, llvm::PointerType::getUnqual(Ty));
-    return CGF.Builder.CreateLoad(Src);
+    if (auto I = dyn_cast<llvm::Instruction>(Src.getPointer()))
+      I->setMetadata("effectiveSan", DITy);
+    llvm::LoadInst *Load = CGF.Builder.CreateLoad(Src);
+    Load->setMetadata("effectiveSan", DITy);
+    return Load;
   }
 
   // Otherwise do coercion through memory. This is stupid, but simple.
   Address Tmp = CreateTempAllocaForCoercion(CGF, Ty, Src.getAlignment());
+  if (auto *I = llvm::dyn_cast<llvm::Instruction>(Tmp.getPointer()))
+    I->setMetadata("effectiveSan", DITy);
   Address Casted = CGF.Builder.CreateBitCast(Tmp, CGF.Int8PtrTy);
   Address SrcCasted = CGF.Builder.CreateBitCast(Src, CGF.Int8PtrTy);
   CGF.Builder.CreateMemCpy(Casted, SrcCasted,
       llvm::ConstantInt::get(CGF.IntPtrTy, SrcSize),
       false);
-  return CGF.Builder.CreateLoad(Tmp);
+  llvm::LoadInst *Load = CGF.Builder.CreateLoad(Tmp);
+  Load->setMetadata("effectiveSan", DITy);
+  return Load;
 }
 
 // Function to store a first-class aggregate into memory.  We prefer to
@@ -1203,6 +1217,10 @@ static void BuildAggStore(CodeGenFunction &CGF, llvm::Value *Val,
       auto EltOffset = CharUnits::fromQuantity(Layout->getElementOffset(i));
       Address EltPtr = CGF.Builder.CreateStructGEP(Dest, i, EltOffset);
       llvm::Value *Elt = CGF.Builder.CreateExtractValue(Val, i);
+      if (auto *PtrTy = llvm::dyn_cast<llvm::PointerType>(Elt->getType())) {
+        QualType Ty = CGF.getTypes().UnconvertType(PtrTy);
+        CGF.EmitEffectiveSanMetaData(Elt, Ty);
+      }
       CGF.Builder.CreateStore(Elt, EltPtr, DestIsVolatile);
     }
   } else {
@@ -1217,9 +1235,12 @@ static void BuildAggStore(CodeGenFunction &CGF, llvm::Value *Val,
 /// This safely handles the case when the src type is larger than the
 /// destination type; the upper bits of the src will be lost.
 static void CreateCoercedStore(llvm::Value *Src,
+                               QualType Ty0,
                                Address Dst,
                                bool DstIsVolatile,
                                CodeGenFunction &CGF) {
+  llvm::DIType *DITy = CGF.getDebugInfo()->getOrCreateStandaloneType(Ty0,
+    SourceLocation());
   llvm::Type *SrcTy = Src->getType();
   llvm::Type *DstTy = Dst.getType()->getElementType();
   if (SrcTy == DstTy) {
@@ -1239,6 +1260,8 @@ static void CreateCoercedStore(llvm::Value *Src,
   if ((isa<llvm::IntegerType>(SrcTy) || isa<llvm::PointerType>(SrcTy)) &&
       (isa<llvm::IntegerType>(DstTy) || isa<llvm::PointerType>(DstTy))) {
     Src = CoerceIntOrPtrToIntOrPtr(Src, DstTy, CGF);
+    if (auto *I = llvm::dyn_cast<llvm::Instruction>(Src))
+      I->setMetadata("effectiveSan", DITy);
     CGF.Builder.CreateStore(Src, Dst, DstIsVolatile);
     return;
   }
@@ -1248,6 +1271,8 @@ static void CreateCoercedStore(llvm::Value *Src,
   // If store is legal, just bitcast the src pointer.
   if (SrcSize <= DstSize) {
     Dst = CGF.Builder.CreateBitCast(Dst, llvm::PointerType::getUnqual(SrcTy));
+    if (auto *I = llvm::dyn_cast<llvm::Instruction>(Dst.getPointer()))
+      I->setMetadata("effectiveSan", DITy);
     BuildAggStore(CGF, Src, Dst, DstIsVolatile);
   } else {
     // Otherwise do coercion through memory. This is stupid, but
@@ -1260,6 +1285,8 @@ static void CreateCoercedStore(llvm::Value *Src,
     // FIXME: Assert that we aren't truncating non-padding bits when have access
     // to that information.
     Address Tmp = CreateTempAllocaForCoercion(CGF, SrcTy, Dst.getAlignment());
+    if (auto *I = llvm::dyn_cast<llvm::Instruction>(Tmp.getPointer()))
+      I->setMetadata("effectiveSan", DITy);
     CGF.Builder.CreateStore(Src, Tmp);
     Address Casted = CGF.Builder.CreateBitCast(Tmp, CGF.Int8PtrTy);
     Address DstCasted = CGF.Builder.CreateBitCast(Dst, CGF.Int8PtrTy);
@@ -1463,6 +1490,31 @@ bool CodeGenModule::ReturnTypeUsesFP2Ret(QualType ResultType) {
 llvm::FunctionType *CodeGenTypes::GetFunctionType(GlobalDecl GD) {
   const CGFunctionInfo &FI = arrangeGlobalDeclaration(GD);
   return GetFunctionType(FI);
+}
+
+void
+CodeGenModule::GenEffectiveSanArgs(const CGFunctionInfo &FI,
+                                   llvm::Function *F) {
+
+  std::vector<llvm::Metadata *> ArgTys;
+
+  for (auto i = F->arg_begin(), ie = F->arg_end(); i != ie; ++i)
+  {
+    auto *Arg = &(*i);
+    auto *PtrTy = llvm::dyn_cast<llvm::PointerType>(Arg->getType());
+    if (PtrTy == nullptr) {
+      ArgTys.push_back(nullptr);
+      continue;
+    }
+    QualType Ty = Types.UnconvertType(PtrTy);
+    llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(Ty,
+                                                              SourceLocation());  
+    ArgTys.push_back(DITy);
+  }
+
+  ArrayRef<llvm::Metadata *> ArgTys1(ArgTys.data(), ArgTys.size());
+  llvm::MDNode *MDArgTysNode = llvm::MDNode::get(getLLVMContext(), ArgTys1);
+  F->setMetadata("effectiveSanArgs", MDArgTysNode);
 }
 
 llvm::FunctionType *
@@ -2390,7 +2442,7 @@ void CodeGenFunction::EmitFunctionProlog(const CGFunctionInfo &FI,
         assert(NumIRArgs == 1);
         auto AI = FnArgs[FirstIRArg];
         AI->setName(Arg->getName() + ".coerce");
-        CreateCoercedStore(AI, Ptr, /*DestIsVolatile=*/false, *this);
+        CreateCoercedStore(AI, Ty, Ptr, /*DestIsVolatile=*/false, *this);
       }
 
       // Match to what EmitParmDecl is expecting for this type.
@@ -2778,13 +2830,17 @@ void CodeGenFunction::EmitFunctionEpilog(const CGFunctionInfo &FI,
 
       // Otherwise, we have to do a simple load.
       } else {
-        RV = Builder.CreateLoad(ReturnValue);
+        llvm::LoadInst *Load = Builder.CreateLoad(ReturnValue);
+        llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(RetTy,
+          SourceLocation());
+        Load->setMetadata("effectiveSan", DITy);
+        RV = Load;
       }
     } else {
       // If the value is offset in memory, apply the offset now.
       Address V = emitAddressAtOffset(*this, ReturnValue, RetAI);
 
-      RV = CreateCoercedLoad(V, RetAI.getCoerceToType(), *this);
+      RV = CreateCoercedLoad(V, RetTy, RetAI.getCoerceToType(), *this);
     }
 
     // In ARC, end functions that return a retainable type with a call
@@ -3633,6 +3689,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
        I != E; ++I, ++info_it, ++ArgNo) {
     const ABIArgInfo &ArgInfo = info_it->info;
     RValue RV = I->RV;
+    QualType ArgTy = info_it->type;
 
     // Insert a padding argument to ensure proper alignment.
     if (IRFunctionArgs.hasPaddingArg(ArgNo))
@@ -3813,7 +3870,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
         // In the simple case, just pass the coerced loaded value.
         assert(NumIRArgs == 1);
         IRCallArgs[FirstIRArg] =
-          CreateCoercedLoad(Src, ArgInfo.getCoerceToType(), *this);
+          CreateCoercedLoad(Src, ArgTy, ArgInfo.getCoerceToType(), *this);
       }
 
       break;
@@ -4186,7 +4243,7 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
 
       // If the value is offset in memory, apply the offset now.
       Address StorePtr = emitAddressAtOffset(*this, DestPtr, RetAI);
-      CreateCoercedStore(CI, StorePtr, DestIsVolatile, *this);
+      CreateCoercedStore(CI, RetTy, StorePtr, DestIsVolatile, *this);
 
       return convertTempToRValue(DestPtr, RetTy, SourceLocation());
     }
@@ -4212,6 +4269,10 @@ RValue CodeGenFunction::EmitCall(const CGFunctionInfo &CallInfo,
                               OffsetValue);
     }
   }
+
+  llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+    CallInfo.getReturnType(), SourceLocation());
+  CI->setMetadata("effectiveSan", DITy);
 
   return Ret;
 }

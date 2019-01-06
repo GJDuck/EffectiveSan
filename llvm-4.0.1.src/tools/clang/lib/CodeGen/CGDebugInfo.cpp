@@ -345,6 +345,7 @@ CGDebugInfo::computeChecksum(FileID FID, SmallString<32> &Checksum) const {
 }
 
 llvm::DIFile *CGDebugInfo::getOrCreateFile(SourceLocation Loc) {
+
   if (!Loc.isValid())
     // If Location is not valid then use main input file.
     return DBuilder.createFile(remapDIPath(TheCU->getFilename()),
@@ -1422,7 +1423,8 @@ void CGDebugInfo::CollectCXXBases(const CXXRecordDecl *RD, llvm::DIFile *Unit,
 
   // If we are generating CodeView debug info, we also need to emit records for
   // indirect virtual base classes.
-  if (CGM.getCodeGenOpts().EmitCodeView) {
+  // For EffectiveSan we also want records for indirect virtual base classes.
+  if (true/*CGM.getCodeGenOpts().EmitCodeView*/) {
     CollectCXXBasesAux(RD, Unit, EltTys, RecordTy, RD->vbases(), SeenTypes,
                        llvm::DINode::FlagIndirectVirtualBase);
   }
@@ -1445,6 +1447,11 @@ void CGDebugInfo::CollectCXXBasesAux(
     uint64_t BaseOffset;
 
     if (BI.isVirtual()) {
+      // For EffectiveSan we put the getVBaseClassOffset.
+      // Note that this will corrupt the DWARF output for virtual classes
+      // but we do not care...
+      BaseOffset = CGM.getContext().toBits(RL.getVBaseClassOffset(Base));
+#if 0
       if (CGM.getTarget().getCXXABI().isItaniumFamily()) {
         // virtual base offset offset is -ve. The code generator emits dwarf
         // expression where it expects +ve number.
@@ -1457,6 +1464,7 @@ void CGDebugInfo::CollectCXXBasesAux(
         BaseOffset =
             4 * CGM.getMicrosoftVTableContext().getVBTableIndex(RD, Base);
       }
+#endif
       BFlags |= llvm::DINode::FlagVirtual;
     } else
       BaseOffset = CGM.getContext().toBits(RL.getBaseClassOffset(Base));
@@ -1709,14 +1717,14 @@ void CGDebugInfo::completeType(const EnumDecl *ED) {
 }
 
 void CGDebugInfo::completeType(const RecordDecl *RD) {
-  if (DebugKind > codegenoptions::LimitedDebugInfo ||
-      !CGM.getLangOpts().CPlusPlus)
+//  if (DebugKind > codegenoptions::LimitedDebugInfo ||
+//      !CGM.getLangOpts().CPlusPlus)
     completeRequiredType(RD);
 }
 
 void CGDebugInfo::completeClassData(const RecordDecl *RD) {
-  if (DebugKind <= codegenoptions::DebugLineTablesOnly)
-    return;
+//  if (DebugKind <= codegenoptions::DebugLineTablesOnly)
+//    return;
   QualType Ty = CGM.getContext().getRecordType(RD);
   void *TyPtr = Ty.getAsOpaquePtr();
   auto I = TypeCache.find(TyPtr);
@@ -1727,6 +1735,8 @@ void CGDebugInfo::completeClassData(const RecordDecl *RD) {
   TypeCache[TyPtr].reset(Res);
 }
 
+// EffectiveSan unused functions
+#if 0
 static bool hasExplicitMemberDefinition(CXXRecordDecl::method_iterator I,
                                         CXXRecordDecl::method_iterator End) {
   for (CXXMethodDecl *MD : llvm::make_range(I, End))
@@ -1811,10 +1821,11 @@ static bool shouldOmitDefinition(codegenoptions::DebugInfoKind DebugKind,
 
   return false;
 }
+#endif
 
 void CGDebugInfo::completeRequiredType(const RecordDecl *RD) {
-  if (shouldOmitDefinition(DebugKind, DebugTypeExtRefs, RD, CGM.getLangOpts()))
-    return;
+//  if (shouldOmitDefinition(DebugKind, DebugTypeExtRefs, RD, CGM.getLangOpts()))
+//    return;
 
   QualType Ty = CGM.getContext().getRecordType(RD);
   llvm::DIType *T = getTypeOrNull(Ty);
@@ -1823,14 +1834,19 @@ void CGDebugInfo::completeRequiredType(const RecordDecl *RD) {
 }
 
 llvm::DIType *CGDebugInfo::CreateType(const RecordType *Ty) {
-  RecordDecl *RD = Ty->getDecl();
+//  RecordDecl *RD = Ty->getDecl();
   llvm::DIType *T = cast_or_null<llvm::DIType>(getTypeOrNull(QualType(Ty, 0)));
+  // For EffectiveSan we want the full type definitions, never forward decls.
+#if 0
   if (T || shouldOmitDefinition(DebugKind, DebugTypeExtRefs, RD,
                                 CGM.getLangOpts())) {
     if (!T)
       T = getOrCreateRecordFwdDecl(Ty, getDeclContextDescriptor(RD));
     return T;
   }
+#endif
+  if (T)
+    return T;
 
   return CreateTypeDefinition(Ty);
 }
@@ -3733,6 +3749,10 @@ void CGDebugInfo::EmitGlobalVariable(llvm::GlobalVariable *Var,
   QualType T;
   collectVarDeclProps(D, Unit, LineNo, T, DeclName, LinkageName, DContext);
 
+  llvm::DIType *DITy = getOrCreateStandaloneType(
+    CGM.getContext().getPointerType(T), SourceLocation());
+  Var->setMetadata("effectiveSan", DITy);
+
   // Attempt to store one global variable for the declaration - even if we
   // emit a lot of fields.
   llvm::DIGlobalVariableExpression *GVE = nullptr;
@@ -3917,6 +3937,7 @@ void CGDebugInfo::setDwoId(uint64_t Signature) {
 
 
 void CGDebugInfo::finalize() {
+
   // Creating types might create further types - invalidating the current
   // element and the size(), so don't cache/reference them.
   for (size_t i = 0; i != ObjCInterfaceCache.size(); ++i) {

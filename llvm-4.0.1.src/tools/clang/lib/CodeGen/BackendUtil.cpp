@@ -298,7 +298,7 @@ void EmitAssemblyHelper::CreatePasses(legacy::PassManager &MPM,
   // internal module before any optimization.
   if (CodeGenOpts.DisableLLVMPasses)
     return;
-
+  
   PassManagerBuilderWrapper PMBuilder(CodeGenOpts, LangOpts);
 
   // Figure out TargetLibraryInfo.  This needs to be added to MPM and FPM
@@ -501,7 +501,7 @@ void EmitAssemblyHelper::CreateTargetMachine(bool MustCreateTM) {
       .Case("kernel", llvm::CodeModel::Kernel)
       .Case("medium", llvm::CodeModel::Medium)
       .Case("large", llvm::CodeModel::Large)
-      .Case("default", llvm::CodeModel::Default)
+      .Case("default", llvm::CodeModel::Medium)  // EFFECTIVE: LowFat globals
       .Default(~0u);
   assert(CodeModel != ~0u && "invalid code model!");
   llvm::CodeModel::Model CM = static_cast<llvm::CodeModel::Model>(CodeModel);
@@ -708,6 +708,30 @@ void EmitAssemblyHelper::EmitAssembly(BackendAction Action,
 
   // Run passes. For now we do all passes at once, but eventually we
   // would like to have the option of streaming code generation.
+
+  if (LangOpts.Sanitize.has(SanitizerKind::Effective)) {
+    // EFFECTIVE: Currently EffectiveSan must be run before the function passes.
+    legacy::PassManager MPM;
+
+    if (CodeGenOpts.OptimizationLevel != 2) {
+      // EffectiveSan wants -O2:
+      unsigned DiagID = Diags.getCustomDiagID(
+        DiagnosticsEngine::Warning, "EffectiveSan assumes -O2 optimization "
+                                    "level; got -O%0");
+      Diags.Report(DiagID) << std::to_string(CodeGenOpts.OptimizationLevel);
+    }
+
+    // EFFECTIVE:
+    // Optimization to reduce the number of memory operations and thus
+    // the number of type/bounds checks.  The optimization passes have been
+    // modified to preserve the effectiveSan metadata.
+    MPM.add(createFunctionInliningPass());
+    MPM.add(createPromoteMemoryToRegisterPass());
+    MPM.add(createGVNPass());
+
+    MPM.add(createEffectiveSanPass());
+    MPM.run(*TheModule);
+  }
 
   {
     PrettyStackTraceString CrashInfo("Per-function optimization");

@@ -698,6 +698,9 @@ CodeGenVTables::GenerateConstructionVTable(const CXXRecordDecl *RD,
   // Create the variable that will hold the construction vtable.
   llvm::GlobalVariable *VTable =
     CGM.CreateOrReplaceCXXRuntimeVariable(Name, VTType, Linkage);
+  llvm::DIType *DITy = CGM.getModuleDebugInfo()->getOrCreateStandaloneType(
+    CGM.getContext().VoidPtrTy, SourceLocation());
+  VTable->setMetadata("effectiveSan", DITy);
   CGM.setGlobalVisibility(VTable, RD);
 
   // V-tables are always unnamed_addr.

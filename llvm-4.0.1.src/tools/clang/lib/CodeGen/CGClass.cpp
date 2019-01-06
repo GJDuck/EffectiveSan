@@ -381,7 +381,13 @@ CodeGenFunction::GetAddressOfDerivedClass(Address BaseAddr,
 
   if (!NonVirtualOffset) {
     // No offset, we can just cast back.
-    return Builder.CreateBitCast(BaseAddr, DerivedPtrTy);
+    auto Address = Builder.CreateBitCast(BaseAddr, DerivedPtrTy);
+    if (auto I = llvm::dyn_cast<llvm::Instruction>(Address.getPointer())) {
+      llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+        getContext().getPointerType(DerivedTy), SourceLocation());
+      I->setMetadata("effectiveSan", DITy);
+    }
+    return Address;
   }
 
   llvm::BasicBlock *CastNull = nullptr;
@@ -405,6 +411,11 @@ CodeGenFunction::GetAddressOfDerivedClass(Address BaseAddr,
 
   // Just cast.
   Value = Builder.CreateBitCast(Value, DerivedPtrTy);
+  if (auto I = llvm::dyn_cast<llvm::Instruction>(Value)) {
+    llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+      getContext().getPointerType(DerivedTy), SourceLocation());
+    I->setMetadata("effectiveSan", DITy);
+  }
 
   // Produce a PHI if we had a null-check.
   if (NullCheckValue) {

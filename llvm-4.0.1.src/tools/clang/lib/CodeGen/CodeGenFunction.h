@@ -1361,8 +1361,8 @@ public:
   CodeGenTypes &getTypes() const { return CGM.getTypes(); }
   ASTContext &getContext() const { return CGM.getContext(); }
   CGDebugInfo *getDebugInfo() { 
-    if (DisableDebugInfo) 
-      return nullptr;
+    //if (DisableDebugInfo) 
+    //  return nullptr;
     return DebugInfo; 
   }
   void disableDebugInfo() { DisableDebugInfo = true; }
@@ -1848,9 +1848,11 @@ public:
   /// block. The caller is responsible for setting an appropriate alignment on
   /// the alloca.
   llvm::AllocaInst *CreateTempAlloca(llvm::Type *Ty,
-                                     const Twine &Name = "tmp");
+                                     const Twine &Name = "tmp",
+                                     QualType *QTy = nullptr);
   Address CreateTempAlloca(llvm::Type *Ty, CharUnits align,
-                           const Twine &Name = "tmp");
+                           const Twine &Name = "tmp",
+                           QualType *Qty = nullptr);
 
   /// CreateDefaultAlignedTempAlloca - This creates an alloca with the
   /// default ABI alignment of the given LLVM type.
@@ -3609,6 +3611,9 @@ public:
                                    AlignmentSource *Source = nullptr);
 
   void EmitSanitizerStatReport(llvm::SanitizerStatKind SSK);
+
+  void EmitEffectiveSanMetaData(llvm::Value *Val, QualType Ty,
+                                bool isPtr = true) const;
 
 private:
   QualType getVarArgType(const Expr *Arg);

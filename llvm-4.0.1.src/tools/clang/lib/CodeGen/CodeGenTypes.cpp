@@ -259,7 +259,10 @@ void CodeGenTypes::UpdateCompletedType(const TagDecl *TD) {
   // If we completed a RecordDecl that we previously used and converted to an
   // anonymous type, then go ahead and complete it now.
   const RecordDecl *RD = cast<RecordDecl>(TD);
-  if (RD->isDependentType()) return;
+  if (RD->isDependentType()) {
+    if (CGDebugInfo *DI = CGM.getModuleDebugInfo()) DI->completeType(RD);  
+    return;
+  }
 
   // Only complete it if we converted it already.  If we haven't converted it
   // yet, we'll just do it lazily.
@@ -639,11 +642,67 @@ llvm::Type *CodeGenTypes::ConvertType(QualType T) {
     break;
   }
   }
+
+  if (!ResultType->isIntegerTy()) {
+    CanQualType U = Context.getCanonicalType(T);
+    auto I = EffectiveSanCache.find(ResultType);
+    if (I == EffectiveSanCache.end()) {
+      EffectiveSanCache[ResultType] = U;
+    }
+  }
   
   assert(ResultType && "Didn't convert a type?");
   
   TypeCache[Ty] = ResultType;
   return ResultType;
+}
+
+/// UnconvertPointerType - Unconvert an llvm::Type (for EffectiveSan).
+QualType CodeGenTypes::UnconvertType(llvm::Type *Ty) {
+
+  auto I = EffectiveSanCache.find(Ty);
+  QualType T;
+  if (I != EffectiveSanCache.end())
+    return I->second;
+  if (auto *PtrTy = llvm::dyn_cast<llvm::PointerType>(Ty)) {
+    auto *ElemTy = PtrTy->getElementType();
+    T = UnconvertType(ElemTy);
+    T = Context.getPointerType(T);
+  }
+  else if (Ty->isIntegerTy()) {
+    unsigned width = Ty->getIntegerBitWidth();
+    width = (width == 1? 8: width);
+    switch (width) {
+    case 8: case 16: case 32: case 64: case 128:
+      T = Context.getIntTypeForBitwidth(width, true);
+      break;
+    default:
+      T = Context.CharTy;
+      break;
+    }
+  }
+  else if (Ty->isVoidTy())
+    T = Context.VoidTy;
+  else if (Ty->isHalfTy())
+    T = Context.HalfTy;
+  else if (Ty->isFloatTy())
+    T = Context.FloatTy;
+  else if (Ty->isDoubleTy())
+    T = Context.DoubleTy;
+  else if (auto *FnTy = llvm::dyn_cast<llvm::FunctionType>(Ty)) {
+    QualType RetTy = UnconvertType(FnTy->getReturnType());
+    std::vector<QualType> Params;
+    for (auto *Param: FnTy->params())
+      Params.push_back(UnconvertType(Param));
+    FunctionProtoType::ExtProtoInfo Info;
+    Info.Variadic = FnTy->isVarArg();
+    T = Context.getFunctionType(RetTy, Params, Info);
+  }
+  else 
+    T = Context.CharTy;     // Give up
+
+  EffectiveSanCache[Ty] = T;
+  return T;
 }
 
 bool CodeGenModule::isPaddedAtomicType(QualType type) {
@@ -714,6 +773,11 @@ llvm::StructType *CodeGenTypes::ConvertRecordDeclType(const RecordDecl *RD) {
   if (RecordsBeingLaidOut.empty())
     while (!DeferredRecords.empty())
       ConvertRecordDeclType(DeferredRecords.pop_back_val());
+
+  auto I = EffectiveSanCache.find(Ty);
+  if (I == EffectiveSanCache.end()) {
+    EffectiveSanCache[Ty] = Context.getRecordType(RD);
+  }
 
   return Ty;
 }

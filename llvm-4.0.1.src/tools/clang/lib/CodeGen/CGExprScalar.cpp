@@ -1398,7 +1398,13 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
                                       CE->getLocStart());
     }
 
-    return Builder.CreateBitCast(Src, DstTy);
+    llvm::Value *Val = Builder.CreateBitCast(Src, DstTy);
+    if (auto I = llvm::dyn_cast<llvm::Instruction>(Val)) {
+      llvm::DIType *DITy = CGF.getDebugInfo()->getOrCreateStandaloneType(
+        DestTy, SourceLocation());
+      I->setMetadata("effectiveSan", DITy);
+    }
+    return Val;
   }
   case CK_AddressSpaceConversion: {
     Expr::EvalResult Result;
@@ -1534,8 +1540,13 @@ Value *ScalarExprEmitter::VisitCastExpr(CastExpr *CE) {
     bool InputSigned = E->getType()->isSignedIntegerOrEnumerationType();
     llvm::Value* IntResult =
       Builder.CreateIntCast(Src, MiddleTy, InputSigned, "conv");
-
-    return Builder.CreateIntToPtr(IntResult, DestLLVMTy);
+    llvm::Value *Val = Builder.CreateIntToPtr(IntResult, DestLLVMTy);
+    if (auto I = llvm::dyn_cast<llvm::Instruction>(Val)) {
+      llvm::DIType *DITy = CGF.getDebugInfo()->getOrCreateStandaloneType(
+        DestTy, SourceLocation());
+      I->setMetadata("effectiveSan", DITy);
+    }
+    return Val;
   }
   case CK_PointerToIntegral:
     assert(!DestTy->isBooleanType() && "bool should use PointerToBool");

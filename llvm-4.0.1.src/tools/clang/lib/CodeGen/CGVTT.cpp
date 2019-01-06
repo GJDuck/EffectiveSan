@@ -123,6 +123,9 @@ llvm::GlobalVariable *CodeGenVTables::GetAddrOfVTT(const CXXRecordDecl *RD) {
   llvm::GlobalVariable *GV =
     CGM.CreateOrReplaceCXXRuntimeVariable(Name, ArrayType, 
                                           llvm::GlobalValue::ExternalLinkage);
+  llvm::DIType *DITy = CGM.getModuleDebugInfo()->getOrCreateStandaloneType(
+    CGM.getContext().VoidPtrTy, SourceLocation());
+  GV->setMetadata("effectiveSan", DITy);    // VTT treated as (void *)
   GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   return GV;
 }

@@ -1600,6 +1600,9 @@ llvm::GlobalVariable *ItaniumCXXABI::getAddrOfVTable(const CXXRecordDecl *RD,
 
   VTable = CGM.CreateOrReplaceCXXRuntimeVariable(
       Name, VTableType, llvm::GlobalValue::ExternalLinkage);
+  llvm::DIType *DITy = CGM.getModuleDebugInfo()->getOrCreateStandaloneType(
+    CGM.getContext().VoidPtrTy, SourceLocation());
+  VTable->setMetadata("effectiveSan", DITy);    // vptr treated as (void *)
   VTable->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
 
   if (RD->hasAttr<DLLImportAttr>())
@@ -1973,8 +1976,10 @@ void ItaniumCXXABI::EmitGuardedInit(CodeGenFunction &CGF,
   bool useInt8GuardVariable = !threadsafe && var->hasInternalLinkage();
 
   llvm::IntegerType *guardTy;
+  QualType GuardTy;
   CharUnits guardAlignment;
   if (useInt8GuardVariable) {
+    GuardTy = CGF.getContext().CharTy;
     guardTy = CGF.Int8Ty;
     guardAlignment = CharUnits::One();
   } else {
@@ -1988,6 +1993,7 @@ void ItaniumCXXABI::EmitGuardedInit(CodeGenFunction &CGF,
       guardAlignment = CharUnits::fromQuantity(
                              CGM.getDataLayout().getABITypeAlignment(guardTy));
     }
+    GuardTy = CGF.getContext().UnsignedLongLongTy;
   }
   llvm::PointerType *guardPtrTy = guardTy->getPointerTo();
 
@@ -2012,6 +2018,9 @@ void ItaniumCXXABI::EmitGuardedInit(CodeGenFunction &CGF,
     // If the variable is thread-local, so is its guard variable.
     guard->setThreadLocalMode(var->getThreadLocalMode());
     guard->setAlignment(guardAlignment.getQuantity());
+    llvm::DIType *DITy = CGF.getDebugInfo()->getOrCreateStandaloneType(
+        CGF.getContext().getPointerType(GuardTy), SourceLocation());
+    guard->setMetadata("effectiveSan", DITy);
 
     // The ABI says: "It is suggested that it be emitted in the same COMDAT
     // group as the associated data object." In practice, this doesn't work for
@@ -2549,6 +2558,9 @@ llvm::GlobalVariable *ItaniumRTTIBuilder::GetAddrOfTypeName(
 
   llvm::GlobalVariable *GV =
     CGM.CreateOrReplaceCXXRuntimeVariable(Name, Init->getType(), Linkage);
+  llvm::DIType *DITy = CGM.getModuleDebugInfo()->getOrCreateStandaloneType(
+    CGM.getContext().CharTy, SourceLocation());
+  GV->setMetadata("effectiveSan", DITy);
 
   GV->setInitializer(Init);
 
@@ -3111,6 +3123,9 @@ llvm::Constant *ItaniumRTTIBuilder::BuildTypeInfo(QualType Ty, bool Force,
   llvm::GlobalVariable *GV =
       new llvm::GlobalVariable(M, Init->getType(),
                                /*Constant=*/true, Linkage, Init, Name);
+  llvm::DIType *DITy = CGM.getModuleDebugInfo()->getOrCreateStandaloneType(
+    CGM.getContext().CharTy, SourceLocation());
+  GV->setMetadata("effectiveSan", DITy);	// type info treated as (char[])
 
   // If there's already an old global variable, replace it with the new one.
   if (OldGV) {

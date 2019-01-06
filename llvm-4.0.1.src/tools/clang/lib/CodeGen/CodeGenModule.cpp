@@ -132,8 +132,9 @@ CodeGenModule::CodeGenModule(ASTContext &C, const HeaderSearchOptions &HSO,
 
   // If debug info or coverage generation is enabled, create the CGDebugInfo
   // object.
-  if (CodeGenOpts.getDebugInfo() != codegenoptions::NoDebugInfo ||
-      CodeGenOpts.EmitGcovArcs || CodeGenOpts.EmitGcovNotes)
+  // EffectiveSan - always create such an object
+//  if (CodeGenOpts.getDebugInfo() != codegenoptions::NoDebugInfo ||
+//      CodeGenOpts.EmitGcovArcs || CodeGenOpts.EmitGcovNotes)
     DebugInfo.reset(new CGDebugInfo(*this));
 
   Block.GlobalUniqueCount = 0;
@@ -422,7 +423,6 @@ void CodeGenModule::Release() {
       (Context.getLangOpts().Modules || !LinkerOptionsMetadata.empty())) {
     EmitModuleLinkOptions();
   }
-
   if (CodeGenOpts.DwarfVersion) {
     // We actually want the latest version when there are conflicts.
     // We can change from Warning to Latest if such mode is supported.
@@ -2249,6 +2249,12 @@ CodeGenModule::GetOrCreateLLVMGlobal(StringRef MangledName,
       llvm::GlobalValue::ExternalLinkage, nullptr, MangledName, nullptr,
       llvm::GlobalVariable::NotThreadLocal, AddrSpace);
 
+  if (D) {
+    llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+      getContext().getPointerType(D->getType()), SourceLocation());
+    GV->setMetadata("effectiveSan", DITy);
+  }
+
   // If we already created a global with the same mangled name (but different
   // type) before, take its name and remove it from its parent.
   if (Entry) {
@@ -3046,6 +3052,7 @@ void CodeGenModule::EmitGlobalFunctionDefinition(GlobalDecl GD,
   maybeSetTrivialComdat(*D, *Fn);
 
   CodeGenFunction(*this).GenerateCode(D, Fn, FI);
+  GenEffectiveSanArgs(FI, Fn);
 
   setFunctionDefinitionAttributes(D, Fn);
   SetLLVMFunctionAttributesForDefinition(D, Fn);
@@ -3309,6 +3316,9 @@ CodeGenModule::GetAddrOfConstantCFString(const StringLiteral *Literal) {
   auto *GV =
       new llvm::GlobalVariable(getModule(), C->getType(), /*isConstant=*/true,
                                llvm::GlobalValue::PrivateLinkage, C, ".str");
+  llvm::DIType *DITy = DebugInfo->getOrCreateStandaloneType(
+    getContext().getPointerType(CFTy), SourceLocation());
+  GV->setMetadata("effectiveSan", DITy);
   GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   // Don't enforce the target's minimum global alignment, since the only use
   // of the string is via this class initializer.
@@ -3446,6 +3456,9 @@ GenerateStringLiteral(llvm::Constant *C, llvm::GlobalValue::LinkageTypes LT,
   auto *GV = new llvm::GlobalVariable(
       M, C->getType(), !CGM.getLangOpts().WritableStrings, LT, C, GlobalName,
       nullptr, llvm::GlobalVariable::NotThreadLocal, AddrSpace);
+  llvm::DIType *DITy = CGM.getModuleDebugInfo()->getOrCreateStandaloneType(
+    CGM.getContext().VoidPtrTy, SourceLocation());
+  GV->setMetadata("effectiveSan", DITy);
   GV->setAlignment(Alignment.getQuantity());
   GV->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
   if (GV->isWeakForLinker()) {

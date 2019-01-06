@@ -100,6 +100,9 @@ struct InstrProfOptions {
 ModulePass *createInstrProfilingLegacyPass(
     const InstrProfOptions &Options = InstrProfOptions());
 
+// Insert EffectiveSan instrumentation
+ModulePass *createEffectiveSanPass();
+
 // Insert AddressSanitizer (address sanity checking) instrumentation
 FunctionPass *createAddressSanitizerFunctionPass(bool CompileKernel = false,
                                                  bool Recover = false,

@@ -3146,8 +3146,8 @@ GetX86_64ByValArgumentPair(llvm::Type *Lo, llvm::Type *Hi,
     }
   }
 
-  llvm::StructType *Result = llvm::StructType::get(Lo, Hi, nullptr);
-
+  llvm::StructType *Result = llvm::StructType::create({Lo, Hi},
+                                                      "effectiveArgPair");
 
   // Verify that the second element is at an 8-byte offset.
   assert(TD.getStructLayout(Result)->getElementOffset(1) == 8 &&

@@ -20,6 +20,8 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/Utils/Local.h"
+#include "llvm/IR/DebugInfo.h"
 using namespace llvm;
 
 static bool CanPHITrans(Instruction *Inst) {
@@ -388,6 +390,9 @@ InsertPHITranslatedSubExpr(Value *InVal, BasicBlock *CurBB,
                                      InVal->getName() + ".phi.trans.insert",
                                      PredBB->getTerminator());
     New->setDebugLoc(Inst->getDebugLoc());
+    auto *Ty = getEffectiveSanType(Cast);
+    if (Ty)
+      New->setMetadata("effectiveSan", Ty);
     NewInsts.push_back(New);
     return New;
   }

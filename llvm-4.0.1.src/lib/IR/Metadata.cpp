@@ -1470,3 +1470,39 @@ void GlobalVariable::getDebugInfo(
   for (MDNode *MD : MDs)
     GVs.push_back(cast<DIGlobalVariableExpression>(MD));
 }
+
+// EFFECTIVESAN:
+DIType *llvm::getEffectiveSanType(const Value *Ptr) {
+  DIType *Ty = nullptr;
+  if (auto *I = dyn_cast<Instruction>(Ptr)) {
+    // For instructions, we use the special effectiveSan meta data
+    // that is assumed to be inserted by the frontend:
+    MDNode *Metadata = I->getMetadata("effectiveSan");
+    if (Metadata == nullptr)
+      return nullptr;
+    Ty = dyn_cast<DIType>(Metadata);
+    return Ty;
+  }
+  else if (auto *GV = dyn_cast<GlobalVariable>(Ptr)) {
+    MDNode *Metadata = GV->getMetadata("effectiveSan");
+    if (Metadata == nullptr)
+      return nullptr;
+    Ty = dyn_cast<DIType>(Metadata);
+    return Ty;
+  }
+  else if (auto *Arg = dyn_cast<Argument>(Ptr)) {
+    const Function *F = Arg->getParent();
+    MDNode *Metadata = F->getMetadata("effectiveSanArgs");
+    if (Metadata == nullptr)
+      return nullptr;
+    unsigned idx = Arg->getArgNo();
+    auto *MD = Metadata->getOperand(idx).get();
+    if (MD == nullptr)
+      return nullptr;
+    Ty = dyn_cast<DIType>(MD);
+    return Ty;
+  }
+  else
+    return nullptr;
+}
+
