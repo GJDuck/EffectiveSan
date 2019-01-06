@@ -1,7 +1,3 @@
-
-**Note**: This repository does not contain the EffectiveSan source code yet.
-          We anticipate the public release will be in mid-January 2019.
-
 The Effective Type Sanitizer --- Dynamically Typed C/C++
 ========================================================
 
