@@ -165,7 +165,7 @@ Finally, consider the *(sub-)object bounds error*:
 
         get(t, 4)
 
-EffectiveSan uses dynamic typing and bounds narrowing to detect **sub-**object
+EffectiveSan uses dynamic typing and bounds narrowing to detect sub-object
 bounds errors:
 
         SUBOBJECT BOUNDS ERROR:
@@ -220,7 +220,7 @@ Then, under EffectiveSan, the memory layout will be as follows:
 
 <p align="center">
 <img src="images/layout.png"
-     width="30%" alt="EffectiveSan object layout.">
+     width="50%" alt="EffectiveSan object layout.">
 </p>
 
 Here (`META`) is the EffectiveSan object meta data comprising (1)
@@ -266,7 +266,7 @@ we use the standard SPEC2006 benchmark suite:
 
 <p align="center">
 <img src="images/results.png"
-     width="60%" alt="EffectiveSan SPEC2006 timings.">
+     width="75%" alt="EffectiveSan SPEC2006 timings.">
 </p>
 
 We also compare two different versions of EffectiveSan:
