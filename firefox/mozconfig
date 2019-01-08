@@ -1,0 +1,29 @@
+#        __  __           _   _           ____
+#   ___ / _|/ _| ___  ___| |_(_)_   _____/ ___|  __ _ _ __
+#  / _ \ |_| |_ / _ \/ __| __| \ \ / / _ \___ \ / _` | '_ \
+# |  __/  _|  _|  __/ (__| |_| |\ V /  __/___) | (_| | | | |
+#  \___|_| |_|  \___|\___|\__|_| \_/ \___|____/ \__,_|_| |_|
+# 
+# mozconfig for EffectiveSan
+#
+
+mk_add_options MOZ_MAKE_FLAGS="-j15"
+
+ac_add_options --disable-tests
+ac_add_options --disable-crashreporter
+ac_add_options --disable-gold
+ac_add_options --disable-jemalloc
+ac_add_options --disable-elf-hack
+ac_add_options --enable-optimize
+ac_add_options --enable-llvm-hacks
+ac_add_options --with-system-libvpx
+ac_add_options --disable-libjpeg-turbo
+ac_add_options --enable-debug-symbols
+
+export CFLAGS="-fsanitize=effective -Dxmalloc=malloc -fPIC -msse4.2 -mcmodel=large -g -mllvm -effective-blacklist -mllvm $PWD/effective.blacklist"
+export CXXFLAGS="-fsanitize=effective -Dxmalloc=malloc -fPIC -msse4.2 -mcmodel=large -g -mllvm -effective-blacklist -mllvm $PWD/effective.blacklist"
+export LDFLAGS="-fsanitize=effective"
+
+CC=$PWD/../../install/bin/clang
+CXX=$PWD/../../install/bin/clang++
+
