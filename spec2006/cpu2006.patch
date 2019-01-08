@@ -1,0 +1,957 @@
+reverted:
+--- benchspec/CPU2006/400.perlbench/src/perl.h
++++ benchspec/CPU2006/400.perlbench/src/perl.h
+@@ -738,6 +738,7 @@
+ /* This comes after <stdlib.h> so we don't try to change the standard
+  * library prototypes; we'll use our own in proto.h instead. */
+ 
++#if 0
+ #ifdef MYMALLOC
+ #  ifdef PERL_POLLUTE_MALLOC
+ #   ifndef PERL_EXTMALLOC_DEF
+@@ -779,6 +780,22 @@
+ #  define CHECK_MALLOC_TAINT(newval)		((void)0)
+ #  define MALLOC_CHECK_TAINT(argc,argv,env)
+ #endif /* MYMALLOC */
++#endif
++
++#define Perl_malloc     malloc
++#define Perl_calloc     calloc
++#define Perl_realloc    realloc
++#define Perl_mfree      free
++#define safemalloc  Perl_malloc
++#define safecalloc  Perl_calloc
++#define saferealloc Perl_realloc
++#define safefree    Perl_mfree
++#define Perl_safesysmalloc  malloc
++#define Perl_safesysrealloc realloc
++#define Perl_safesysfree    free
++#define CHECK_MALLOC_TOO_LATE_FOR(ch)		((void)0)
++#define CHECK_MALLOC_TAINT(newval)		((void)0)
++#define MALLOC_CHECK_TAINT(argc,argv,env)
+ 
+ #define TOO_LATE_FOR_(ch,s)	Perl_croak(aTHX_ "\"-%c\" is on the #! line, it must also be used on the command line%s", (char)(ch), s)
+ #define TOO_LATE_FOR(ch)	TOO_LATE_FOR_(ch, "")
+@@ -4369,6 +4386,8 @@
+        }                                                  \
+        UNLOCK_SV_MUTEX;                                   \
+    } STMT_END
++#undef offer_nice_chunk
++#define offer_nice_chunk(chunk, chunk_size)     Safefree(chunk)
+ 
+ #ifdef HAS_SEM
+ #   include <sys/ipc.h>
+reverted:
+--- benchspec/CPU2006/400.perlbench/src/perlio.c
++++ benchspec/CPU2006/400.perlbench/src/perlio.c
+@@ -748,7 +748,7 @@
+ 	len = strlen(name);
+     for (i = 0; i < PL_known_layers->cur; i++) {
+ 	PerlIO_funcs *f = PL_known_layers->array[i].funcs;
++	if (!strcmp(f->name, name) && f->name[len] == 0) {
+-	if (memEQ(f->name, name, len) && f->name[len] == 0) {
+ 	    PerlIO_debug("%.*s => %p\n", (int) len, name, (void*)f);
+ 	    return f;
+ 	}
+reverted:
+--- benchspec/CPU2006/400.perlbench/src/sv.c
++++ benchspec/CPU2006/400.perlbench/src/sv.c
+@@ -4104,6 +4104,25 @@
+ =cut
+ */
+ 
++#undef __attribute__
++__attribute__((no_sanitize_address, noinline))
++char *move_no_asan(char *dest, const char *src, STRLEN len) {
++  char *d = (char*)dest;
++  char *s = (char*)src;
++  signed long i, signed_n = len;
++  if (d < s) {
++    for (i = 0; i < signed_n; ++i)
++      d[i] = s[i];
++  } else {
++    if (d > s && signed_n > 0)
++      for (i = signed_n - 1; i >= 0 ; --i) {
++        d[i] = s[i];
++      }
++  }
++  return dest;
++}
++
++__attribute__((no_sanitize_address))
+ void
+ Perl_sv_setpvn(pTHX_ register SV *sv, register const char *ptr, register STRLEN len)
+ {
+@@ -4124,7 +4143,8 @@
+ 
+     SvGROW(sv, len + 1);
+     dptr = SvPVX(sv);
++    move_no_asan(dptr, ptr, len);
++    // Move(ptr,dptr,len,char);
+-    Move(ptr,dptr,len,char);
+     dptr[len] = '\0';
+     SvCUR_set(sv, len);
+     (void)SvPOK_only_UTF8(sv);		/* validate pointer */
+reverted:
+--- benchspec/CPU2006/400.perlbench/src/util.c
++++ benchspec/CPU2006/400.perlbench/src/util.c
+@@ -59,6 +59,7 @@
+ #  define FD_CLOEXEC 1			/* NeXT needs this */
+ #endif
+ 
++#if 0
+ /* NOTE:  Do not call the next three routines directly.  Use the macros
+  * in handy.h, so that we can easily redefine everything to do tracking of
+  * allocated hunks back to the original New to track down any memory leaks.
+@@ -234,6 +235,8 @@
+ 
+ #endif
+ 
++#endif
++
+ /* copy a string up to some (non-backslashed) delimiter, if any */
+ 
+ char *
+reverted:
+--- benchspec/CPU2006/401.bzip2/src/bzip2.c
++++ benchspec/CPU2006/401.bzip2/src/bzip2.c
+@@ -322,7 +322,7 @@
+ static void    compressedStreamEOF   ( void )    NORETURN;
+ 
+ static void    copyFileName ( Char*, Char* );
++/* static void*   myMalloc     ( Int32 ); */
+-static void*   myMalloc     ( Int32 );
+ 
+ 
+ 
+@@ -1833,6 +1833,7 @@
+ 
+ 
+ /*---------------------------------------------*/
++/*
+ static 
+ void *myMalloc ( Int32 n )
+ {
+@@ -1842,6 +1843,8 @@
+    if (p == NULL) outOfMemory ();
+    return p;
+ }
++*/
++#define myMalloc malloc
+ 
+ 
+ /*---------------------------------------------*/
+reverted:
+--- benchspec/CPU2006/401.bzip2/src/bzlib_private.h
++++ benchspec/CPU2006/401.bzip2/src/bzlib_private.h
+@@ -133,8 +133,10 @@
+ #endif
+ 
+ 
++/* #define BZALLOC(nnn) (strm->bzalloc)(strm->opaque,(nnn),1) */
++#define BZALLOC(nnn)    malloc(nnn)
++/* #define BZFREE(ppp)  (strm->bzfree)(strm->opaque,(ppp)) */
++#define BZFREE(ppp)     free(ppp)
+-#define BZALLOC(nnn) (strm->bzalloc)(strm->opaque,(nnn),1)
+-#define BZFREE(ppp)  (strm->bzfree)(strm->opaque,(ppp))
+ 
+ 
+ /*-- Header bytes. --*/
+reverted:
+--- benchspec/CPU2006/403.gcc/src/libiberty.h
++++ benchspec/CPU2006/403.gcc/src/libiberty.h
+@@ -220,18 +220,21 @@
+    message to stderr (using the name set by xmalloc_set_program_name,
+    if any) and then call xexit.  */
+ 
++/* extern PTR xmalloc PARAMS ((size_t)) ATTRIBUTE_MALLOC; */
++#define xmalloc         malloc
+-extern PTR xmalloc PARAMS ((size_t)) ATTRIBUTE_MALLOC;
+ 
+ /* Reallocate memory without fail.  This works like xmalloc.  Note,
+    realloc type functions are not suitable for attribute malloc since
+    they may return the same address across multiple calls. */
+ 
++/* extern PTR xrealloc PARAMS ((PTR, size_t)); */
++#define xrealloc        realloc
+-extern PTR xrealloc PARAMS ((PTR, size_t));
+ 
+ /* Allocate memory without fail and set it to zero.  This works like
+    xmalloc.  */
+ 
++/* extern PTR xcalloc PARAMS ((size_t, size_t)) ATTRIBUTE_MALLOC; */
++#define xcalloc         calloc
+-extern PTR xcalloc PARAMS ((size_t, size_t)) ATTRIBUTE_MALLOC;
+ 
+ /* Copy a string into a memory buffer without fail.  */
+ 
+reverted:
+--- benchspec/CPU2006/403.gcc/src/xmalloc.c
++++ benchspec/CPU2006/403.gcc/src/xmalloc.c
+@@ -130,6 +130,7 @@
+   xexit (1);
+ }  
+ 
++/*
+ PTR
+ xmalloc (size)
+     size_t size;
+@@ -144,7 +145,9 @@
+ 
+   return (newmem);
+ }
++*/
+ 
++/*
+ PTR
+ xcalloc (nelem, elsize)
+   size_t nelem, elsize;
+@@ -160,7 +163,9 @@
+ 
+   return (newmem);
+ }
++*/
+ 
++/*
+ PTR
+ xrealloc (oldmem, size)
+     PTR oldmem;
+@@ -179,3 +184,4 @@
+ 
+   return (newmem);
+ }
++*/
+reverted:
+--- benchspec/CPU2006/453.povray/src/pov_mem.cpp
++++ benchspec/CPU2006/453.povray/src/pov_mem.cpp
+@@ -30,6 +30,7 @@
+  * $Log$
+  *****************************************************************************/
+ 
++#if 0
+ #include "frame.h"
+ #include "userio.h"           /* Error() */
+ 
+@@ -1069,3 +1070,6 @@
+ #endif /* MEM_STATS */
+ 
+ END_POV_NAMESPACE
++
++#endif
++
+reverted:
+--- benchspec/CPU2006/453.povray/src/pov_mem.h
++++ benchspec/CPU2006/453.povray/src/pov_mem.h
+@@ -58,6 +58,7 @@
+ * Global functions
+ ******************************************************************************/
+ 
++#if 0
+ void mem_init (void);
+ void mem_mark (void);
+ void mem_release (void);
+@@ -68,7 +69,23 @@
+ void pov_free (void *ptr, const char *file, int line);
+ char *pov_strdup (const char *s);
+ void *pov_memmove (void *dest, void *src, size_t length);
++#endif
++
++#define mem_init()                                  /* NOP */
++#define mem_mark()                                  /* NOP */
++#define mem_release()                               /* NOP */
++#define mem_release_all()                           /* NOP */
++#define pov_malloc(size, file, line, msg)           malloc((size))
++#define pov_calloc(nitems, size, file, name, msg)   calloc((nitems), (size))
++#define pov_realloc(ptr, size, file, line, msg)     realloc((ptr), (size))
++#define pov_free(ptr, file, line)                   free((ptr))
++#define pov_strdup(s)                               strdup((s))
++#define pov_memmove(dst, src, len)                  memmove((dst), (src), (len))
++#define mem_stats_smallest_alloc()                  0
++#define mem_stats_largest_alloc()                   0
++#define mem_stats_largest_mem_usage()               0
+ 
++#if 0
+ #if defined(MEM_STATS)
+ /* These are level 1 routines */
+ size_t mem_stats_current_mem_usage (void);
+@@ -85,6 +102,7 @@
+ long int mem_stats_total_frees (void);
+ #endif
+ #endif
++#endif
+ 
+ END_POV_NAMESPACE
+ 
+reverted:
+--- benchspec/CPU2006/456.hmmer/src/squid.h
++++ benchspec/CPU2006/456.hmmer/src/squid.h
+@@ -434,8 +434,10 @@
+ 
+ /* Malloc/realloc calls are wrapped
+  */
++/* #define MallocOrDie(x)     sre_malloc(__FILE__, __LINE__, (x)) */
++#define MallocOrDie(x)          malloc((x))
++/* #define ReallocOrDie(x,y)  sre_realloc(__FILE__, __LINE__, (x), (y)) */
++#define ReallocOrDie(x,y)       realloc((x),(y))
+-#define MallocOrDie(x)     sre_malloc(__FILE__, __LINE__, (x))
+-#define ReallocOrDie(x,y)  sre_realloc(__FILE__, __LINE__, (x), (y))
+ 
+ /****************************************************
+  * Miscellaneous macros and defines
+reverted:
+--- benchspec/CPU2006/471.omnetpp/src/libs/cmdenv/heap.cc
++++ benchspec/CPU2006/471.omnetpp/src/libs/cmdenv/heap.cc
+@@ -295,6 +295,7 @@
+ }
+ #endif
+ 
++#if 0  // Asan can not link if there is a use-defined operator new
+ void *operator new(size_t m)
+ {
+ #ifdef HEAPCHECK
+@@ -400,3 +401,4 @@
+     if(id==breakat) brk("DELETE");
+ #endif
+ }
++#endif
+reverted:
+--- benchspec/CPU2006/482.sphinx3/src/ckd_alloc.c
++++ benchspec/CPU2006/482.sphinx3/src/ckd_alloc.c
+@@ -85,7 +85,7 @@
+ #include "ckd_alloc.h"
+ #include "err.h"
+ 
++#if 0
+-
+ void *__ckd_calloc__(size_t n_elem, size_t elem_size,
+ 		     const char *caller_file, int caller_line)
+ {
+@@ -137,6 +137,7 @@
+     strcpy (buf, orig);
+     return (buf);
+ }
++#endif
+ 
+ 
+ void **__ckd_calloc_2d__ (int32 d1, int32 d2, int32 elemsize,
+@@ -154,11 +155,12 @@
+     return ((void **) ref);
+ }
+ 
++#if 0
+-
+ void ckd_free (void *ptr)
+ {
+     if (ptr) free(ptr);
+ }
++#endif
+ 
+ void ckd_free_2d (void **ptr)
+ {
+@@ -199,7 +201,7 @@
+     ckd_free(ptr);
+ }
+ 
++#if 0
+-
+ /*
+  * Structures for managing linked list elements of various sizes without wasting
+  * memory.  A separate linked list for each element-size.  Element-size must be a
+@@ -319,3 +321,4 @@
+     free (elem);
+ #endif
+ }
++#endif
+reverted:
+--- benchspec/CPU2006/482.sphinx3/src/libutil/ckd_alloc.h
++++ benchspec/CPU2006/482.sphinx3/src/libutil/ckd_alloc.h
+@@ -89,6 +89,7 @@
+  * All functions print a diagnostic message and exit if any error occurs.
+  */
+ 
++#if 0
+ void *__ckd_calloc__(size_t n_elem, size_t elem_size,
+ 		     const char *caller_file, int caller_line);
+ 
+@@ -97,13 +98,26 @@
+ 
+ void *__ckd_realloc__(void *ptr, size_t new_size,
+ 		      const char *caller_file, int caller_line);
++#endif
++
++#define __ckd_calloc__(n_elem, elem_size, caller_file, caller_line)         \
++    calloc((n_elem), (elem_size))
++#define __ckd_malloc__(size, caller_file, caller_line)                      \
++    malloc((size))
++#define __ckd_realloc__(ptr, new_size, caller_file, caller_line)            \
++    realloc((ptr), (new_size))
+ 
+ /*
+  * Like strdup, except that if an error occurs it prints a diagnostic message
+  * and exits.
+  */
++#if 0
+ char *__ckd_salloc__(const char *origstr,
+ 		     const char *caller_file, int32 caller_line);
++#endif
++
++#define __ckd_salloc__(origstr, caller_file, caller_line)                   \
++    strdup(origstr)
+ 
+ /*
+  * Allocate a 2-D array and return ptr to it (ie, ptr to vector of ptrs).
+@@ -122,7 +136,9 @@
+ 			  const char *caller_file, int32 caller_line);	/* In */
+ 
+ /* Test and free an array */
++/* void ckd_free(void *ptr); */
++
++#define ckd_free(ptr)           free((ptr))
+-void ckd_free(void *ptr);
+ 
+ /* Free a 2-D array (ptr) previously allocated by ckd_calloc_2d */
+ void ckd_free_2d(void **ptr);
+@@ -153,14 +169,20 @@
+  * The function internally allocates a block that can accommodate several such elements,
+  * anticipating future allocation requests.
+  */
++/* char *__mymalloc__ (int32 elemsize, char *file, int32 line); */
++
++#define __mymalloc__(elemsize, file, line)                              \
++    malloc((elemsize))
+-char *__mymalloc__ (int32 elemsize, char *file, int32 line);
+ 
+ /*
+  * Free a graph element (of given size) that was previously allocated using mymalloc.
+  * The element is not really freed; it is returned to an internally maintained
+  * freelist pool.
+  */
++/* void __myfree__ (char *elem, int32 elemsize, char *file, int32 line); */
++
++#define __myfree__(elem, elemsize, file, line)                          \
++    free((elem))
+-void __myfree__ (char *elem, int32 elemsize, char *file, int32 line);
+ 
+ /*
+  * Macros to simplify the use of above functions.  One should use these, rather
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/XMemory.cpp
++++ benchspec/CPU2006/483.xalancbmk/src/XMemory.cpp
+@@ -69,6 +69,7 @@
+ 
+ XERCES_CPP_NAMESPACE_BEGIN
+ 
++#if 0
+ void* XMemory::operator new(size_t size)
+ {
+ 	size_t headerSize = XMLPlatformUtils::alignPointerForNewBlockAllocation(
+@@ -146,6 +147,7 @@
+         pM->deallocate(block);
+     }
+ }
++#endif
+ 
+ #endif
+ 
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/BaseRefVectorOf.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/BaseRefVectorOf.c
+@@ -77,7 +77,7 @@
+     , fMemoryManager(manager)
+ {
+     // Allocate and initialize the array
++    fElemList = (TElem**) malloc(maxElems * sizeof(TElem*));//new TElem*[maxElems];
+-    fElemList = (TElem**) fMemoryManager->allocate(maxElems * sizeof(TElem*));//new TElem*[maxElems];
+     for (unsigned int index = 0; index < maxElems; index++)
+         fElemList[index] = 0;
+ }
+@@ -239,7 +239,7 @@
+         for (unsigned int index = 0; index < fCurCount; index++)
+             delete fElemList[index];
+     }
++    free(fElemList);//delete [] fElemList;
+-    fMemoryManager->deallocate(fElemList);//delete [] fElemList;
+ }
+ 
+ //
+@@ -253,7 +253,7 @@
+     if (fElemList)
+         cleanup();
+ 
++    fElemList = (TElem**) malloc(fMaxCount * sizeof(TElem*));//new TElem*[fMaxCount];
+-    fElemList = (TElem**) fMemoryManager->allocate(fMaxCount * sizeof(TElem*));//new TElem*[fMaxCount];
+     for (unsigned int index = 0; index < fMaxCount; index++)
+         fElemList[index] = 0;
+ 
+@@ -312,7 +312,7 @@
+         newMax = fMaxCount + 32;
+ 
+     // Allocate the new array and copy over the existing stuff
++    TElem** newList = (TElem**) malloc
+-    TElem** newList = (TElem**) fMemoryManager->allocate
+     (
+         newMax * sizeof(TElem*)
+     );//new TElem*[newMax];
+@@ -325,7 +325,7 @@
+         newList[index] = 0;
+ 
+     // Clean up the old array and update our members
++    free(fElemList);//delete [] fElemList;
+-    fMemoryManager->deallocate(fElemList);//delete [] fElemList;
+     fElemList = newList;
+     fMaxCount = newMax;
+ }
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/LogicalPath.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/LogicalPath.c
+@@ -43,7 +43,7 @@
+ 
+ {
+     // Create a buffer as large as both parts and empty it
++    XMLCh* tmpBuf = (XMLCh*) malloc
+-    XMLCh* tmpBuf = (XMLCh*) manager->allocate
+     (
+         (XMLString::stringLen(basePath)
+          + XMLString::stringLen(relativePath) + 2) * sizeof(XMLCh)
+@@ -157,13 +157,13 @@
+                                          , MemoryManager* const manager)
+ {
+     int pathLen = XMLString::stringLen(path);
++    XMLCh* tmp1 = (XMLCh*) malloc
+-    XMLCh* tmp1 = (XMLCh*) manager->allocate
+     (
+         (pathLen+1) * sizeof(XMLCh)
+     );//new XMLCh [pathLen+1];
+     ArrayJanitor<XMLCh>   tmp1Name(tmp1, manager);
+ 
++    XMLCh* tmp2 = (XMLCh*) malloc
+-    XMLCh* tmp2 = (XMLCh*) manager->allocate
+     (
+         (pathLen+1) * sizeof(XMLCh)
+     );//new XMLCh [pathLen+1];
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/NameIdPool.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/NameIdPool.c
+@@ -145,7 +145,7 @@
+         ThrowXMLwithMemMgr(IllegalArgumentException, XMLExcepts::Pool_ZeroModulus, fMemoryManager);
+ 
+     // Allocate the bucket list and zero them
++    fBucketList = (NameIdPoolBucketElem<TElem>**) malloc
+-    fBucketList = (NameIdPoolBucketElem<TElem>**) fMemoryManager->allocate
+     (
+         fHashModulus * sizeof(NameIdPoolBucketElem<TElem>*)
+     ); //new NameIdPoolBucketElem<TElem>*[fHashModulus];
+@@ -159,7 +159,7 @@
+     //
+     if (!fIdPtrsCount)
+         fIdPtrsCount = 256;
++    fIdPtrs = (TElem**) malloc
+-    fIdPtrs = (TElem**) fMemoryManager->allocate
+     (
+         fIdPtrsCount * sizeof(TElem*)
+     ); //new TElem*[fIdPtrsCount];
+@@ -172,11 +172,11 @@
+     //  Delete the id pointers list. The stuff it points to will be cleaned
+     //  up when we clean the bucket lists.
+     //
++    free(fIdPtrs); //delete [] fIdPtrs;
+-    fMemoryManager->deallocate(fIdPtrs); //delete [] fIdPtrs;
+ 
+     // Remove all elements then delete the bucket list
+     removeAll();
++    free(fBucketList); //delete [] fBucketList;
+-    fMemoryManager->deallocate(fBucketList); //delete [] fBucketList;
+ }
+ 
+ 
+@@ -303,7 +303,7 @@
+     {
+         // Create a new count 1.5 times larger and allocate a new array
+         unsigned int newCount = (unsigned int)(fIdPtrsCount * 1.5);
++        TElem** newArray = (TElem**) malloc
+-        TElem** newArray = (TElem**) fMemoryManager->allocate
+         (
+             newCount * sizeof(TElem*)
+         ); //new TElem*[newCount];
+@@ -312,7 +312,7 @@
+         memcpy(newArray, fIdPtrs, fIdPtrsCount * sizeof(TElem*));
+ 
+         // Ok, toss the old array and store the new data
++        free(fIdPtrs); //delete [] fIdPtrs;
+-        fMemoryManager->deallocate(fIdPtrs); //delete [] fIdPtrs;
+         fIdPtrs = newArray;
+         fIdPtrsCount = newCount;
+     }
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefArrayOf.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefArrayOf.c
+@@ -108,7 +108,7 @@
+     , fArray(0)
+     , fMemoryManager(manager)
+ {
++    fArray = (TElem**) malloc(fSize * sizeof(TElem*));//new TElem*[fSize];
+-    fArray = (TElem**) fMemoryManager->allocate(fSize * sizeof(TElem*));//new TElem*[fSize];
+     for (unsigned int index = 0; index < fSize; index++)
+         fArray[index] = 0;
+ }
+@@ -122,7 +122,7 @@
+     , fArray(0)
+     , fMemoryManager(manager)
+ {
++    fArray = (TElem**) malloc(fSize * sizeof(TElem*));//new TElem*[fSize];
+-    fArray = (TElem**) fMemoryManager->allocate(fSize * sizeof(TElem*));//new TElem*[fSize];
+     for (unsigned int index = 0; index < fSize; index++)
+         fArray[index] = values[index];
+ }
+@@ -134,14 +134,14 @@
+     , fArray(0)
+     , fMemoryManager(source.fMemoryManager)
+ {
++    fArray = (TElem**) malloc(fSize * sizeof(TElem*));//new TElem*[fSize];
+-    fArray = (TElem**) fMemoryManager->allocate(fSize * sizeof(TElem*));//new TElem*[fSize];
+     for (unsigned int index = 0; index < fSize; index++)
+         fArray[index] = source.fArray[index];
+ }
+ 
+ template <class TElem> RefArrayOf<TElem>::~RefArrayOf()
+ {
++    free(fArray);//delete [] fArray;
+-    fMemoryManager->deallocate(fArray);//delete [] fArray;
+ }
+ 
+ 
+@@ -173,9 +173,9 @@
+     // Reallocate if not the same size
+     if (toAssign.fSize != fSize)
+     {
++        free(fArray);//delete [] fArray;
+-        fMemoryManager->deallocate(fArray);//delete [] fArray;
+         fSize = toAssign.fSize;
++        fArray = (TElem**) malloc(fSize * sizeof(TElem*));//new TElem*[fSize];
+-        fArray = (TElem**) fMemoryManager->allocate(fSize * sizeof(TElem*));//new TElem*[fSize];
+     }
+ 
+     // Copy over the source elements
+@@ -273,7 +273,7 @@
+         ThrowXMLwithMemMgr(IllegalArgumentException, XMLExcepts::Array_BadNewSize, fMemoryManager);
+ 
+     // Allocate the new array
++    TElem** newArray = (TElem**) malloc
+-    TElem** newArray = (TElem**) fMemoryManager->allocate
+     (
+         newSize * sizeof(TElem*)
+     );//new TElem*[newSize];
+@@ -287,7 +287,7 @@
+         newArray[index] = 0;
+ 
+     // Delete the old array and udpate our members
++    free(fArray);//delete [] fArray;
+-    fMemoryManager->deallocate(fArray);//delete [] fArray;
+     fArray = newArray;
+     fSize = newSize;
+ }
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefHash2KeysTableOf.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefHash2KeysTableOf.c
+@@ -160,7 +160,7 @@
+         ThrowXMLwithMemMgr(IllegalArgumentException, XMLExcepts::HshTbl_ZeroModulus, fMemoryManager);
+ 
+     // Allocate the bucket list and zero them
++    fBucketList = (RefHash2KeysTableBucketElem<TVal>**) malloc
+-    fBucketList = (RefHash2KeysTableBucketElem<TVal>**) fMemoryManager->allocate
+     (
+         fHashModulus * sizeof(RefHash2KeysTableBucketElem<TVal>*)
+     ); //new RefHash2KeysTableBucketElem<TVal>*[fHashModulus];
+@@ -173,7 +173,7 @@
+     removeAll();
+ 
+     // Then delete the bucket list & hasher
++    free(fBucketList); //delete [] fBucketList;
+-    fMemoryManager->deallocate(fBucketList); //delete [] fBucketList;
+ 	delete fHash;
+ }
+ 
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefHash3KeysIdPool.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefHash3KeysIdPool.c
+@@ -146,7 +146,7 @@
+     //
+     if (!fIdPtrsCount)
+         fIdPtrsCount = 256;
++    fIdPtrs = (TVal**) malloc(fIdPtrsCount * sizeof(TVal*)); //new TVal*[fIdPtrsCount];
+-    fIdPtrs = (TVal**) fMemoryManager->allocate(fIdPtrsCount * sizeof(TVal*)); //new TVal*[fIdPtrsCount];
+     fIdPtrs[0] = 0;
+ }
+ 
+@@ -176,7 +176,7 @@
+     //
+     if (!fIdPtrsCount)
+         fIdPtrsCount = 256;
++    fIdPtrs = (TVal**) malloc(fIdPtrsCount * sizeof(TVal*)); //new TVal*[fIdPtrsCount];
+-    fIdPtrs = (TVal**) fMemoryManager->allocate(fIdPtrsCount * sizeof(TVal*)); //new TVal*[fIdPtrsCount];
+     fIdPtrs[0] = 0;
+ }
+ 
+@@ -206,7 +206,7 @@
+     //
+     if (!fIdPtrsCount)
+         fIdPtrsCount = 256;
++    fIdPtrs = (TVal**) malloc(fIdPtrsCount * sizeof(TVal*)); //new TVal*[fIdPtrsCount];
+-    fIdPtrs = (TVal**) fMemoryManager->allocate(fIdPtrsCount * sizeof(TVal*)); //new TVal*[fIdPtrsCount];
+     fIdPtrs[0] = 0;
+ }
+ 
+@@ -216,7 +216,7 @@
+         ThrowXMLwithMemMgr(IllegalArgumentException, XMLExcepts::HshTbl_ZeroModulus, fMemoryManager);
+ 
+     // Allocate the bucket list and zero them
++    fBucketList = (RefHash3KeysTableBucketElem<TVal>**) malloc
+-    fBucketList = (RefHash3KeysTableBucketElem<TVal>**) fMemoryManager->allocate
+     (
+         fHashModulus * sizeof(RefHash3KeysTableBucketElem<TVal>*)
+     ); //new RefHash3KeysTableBucketElem<TVal>*[fHashModulus];
+@@ -229,8 +229,8 @@
+     removeAll();
+ 
+     // Then delete the bucket list & hasher & id pointers list
++    free(fIdPtrs); //delete [] fIdPtrs;
++    free(fBucketList); //delete [] fBucketList;
+-    fMemoryManager->deallocate(fIdPtrs); //delete [] fIdPtrs;
+-    fMemoryManager->deallocate(fBucketList); //delete [] fBucketList;
+     delete fHash;
+ }
+ 
+@@ -383,7 +383,7 @@
+     {
+         // Create a new count 1.5 times larger and allocate a new array
+         unsigned int newCount = (unsigned int)(fIdPtrsCount * 1.5);
++        TVal** newArray = (TVal**) malloc
+-        TVal** newArray = (TVal**) fMemoryManager->allocate
+         (
+             newCount * sizeof(TVal*)
+         ); //new TVal*[newCount];
+@@ -392,7 +392,7 @@
+         memcpy(newArray, fIdPtrs, fIdPtrsCount * sizeof(TVal*));
+ 
+         // Ok, toss the old array and store the new data
++        free(fIdPtrs); //delete [] fIdPtrs;
+-        fMemoryManager->deallocate(fIdPtrs); //delete [] fIdPtrs;
+         fIdPtrs = newArray;
+         fIdPtrsCount = newCount;
+     }
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefHashTableOf.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/RefHashTableOf.c
+@@ -213,7 +213,7 @@
+         ThrowXMLwithMemMgr(IllegalArgumentException, XMLExcepts::HshTbl_ZeroModulus, fMemoryManager);
+ 
+     // Allocate the bucket list and zero them
++    fBucketList = (RefHashTableBucketElem<TVal>**) malloc
+-    fBucketList = (RefHashTableBucketElem<TVal>**) fMemoryManager->allocate
+     (
+         fHashModulus * sizeof(RefHashTableBucketElem<TVal>*)
+     ); //new RefHashTableBucketElem<TVal>*[fHashModulus];
+@@ -226,7 +226,7 @@
+     removeAll();
+ 
+     // Then delete the bucket list & hasher
++    free(fBucketList); //delete [] fBucketList;
+-    fMemoryManager->deallocate(fBucketList); //delete [] fBucketList;
+     delete fHash;
+ }
+ 
+@@ -356,7 +356,7 @@
+     removeAll();
+ 
+     // Then delete the bucket list & hasher
++    free(fBucketList); //delete [] fBucketList;
+-    fMemoryManager->deallocate(fBucketList); //delete [] fBucketList;
+     fBucketList = 0;
+     delete fHash;
+ }
+@@ -483,7 +483,7 @@
+     
+     RefHashTableBucketElem<TVal>** oldBucketList = fBucketList;
+     
++    fBucketList = (RefHashTableBucketElem<TVal>**) malloc
+-    fBucketList = (RefHashTableBucketElem<TVal>**) fMemoryManager->allocate
+     (
+         fHashModulus * sizeof(RefHashTableBucketElem<TVal>*)
+     );//new RefHashTableBucketElem<TVal>*[fHashModulus];
+@@ -516,7 +516,7 @@
+         }
+     }
+             
++    free(oldBucketList);//delete[] oldBucketList;
+-    fMemoryManager->deallocate(oldBucketList);//delete[] oldBucketList;
+     
+ }
+ 
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/ValueHashTableOf.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/ValueHashTableOf.c
+@@ -125,7 +125,7 @@
+         ThrowXMLwithMemMgr(IllegalArgumentException, XMLExcepts::HshTbl_ZeroModulus, fMemoryManager);
+ 
+     // Allocate the bucket list and zero them
++    fBucketList = (ValueHashTableBucketElem<TVal>**) malloc
+-    fBucketList = (ValueHashTableBucketElem<TVal>**) fMemoryManager->allocate
+     (
+         fHashModulus * sizeof(ValueHashTableBucketElem<TVal>*)
+     ); //new ValueHashTableBucketElem<TVal>*[fHashModulus];
+@@ -138,7 +138,7 @@
+     removeAll();
+ 
+     // Then delete the bucket list & hasher
++    free(fBucketList); //delete [] fBucketList;
+-    fMemoryManager->deallocate(fBucketList); //delete [] fBucketList;
+ 	delete fHash;
+ }
+ 
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/ValueVectorOf.c
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/ValueVectorOf.c
+@@ -130,7 +130,7 @@
+     , fElemList(0)
+     , fMemoryManager(manager)
+ {
++    fElemList = (TElem*) malloc
+-    fElemList = (TElem*) fMemoryManager->allocate
+     (
+         fMaxCount * sizeof(TElem)
+     ); //new TElem[fMaxCount];
+@@ -147,7 +147,7 @@
+     , fElemList(0)
+     , fMemoryManager(toCopy.fMemoryManager)
+ {
++    fElemList = (TElem*) malloc
+-    fElemList = (TElem*) fMemoryManager->allocate
+     (
+         fMaxCount * sizeof(TElem)
+     ); //new TElem[fMaxCount];
+@@ -163,7 +163,7 @@
+         for (int index= fMaxCount - 1; index >= 0; index--)
+             fElemList[index].~TElem();
+     }
++    free(fElemList); //delete [] fElemList;
+-    fMemoryManager->deallocate(fElemList); //delete [] fElemList;
+ }
+ 
+ 
+@@ -180,8 +180,8 @@
+     // Reallocate if required
+     if (fMaxCount < toAssign.fCurCount)
+     {
++        free(fElemList); //delete [] fElemList;
++        fElemList = (TElem*) malloc
+-        fMemoryManager->deallocate(fElemList); //delete [] fElemList;
+-        fElemList = (TElem*) fMemoryManager->allocate
+         (
+             toAssign.fMaxCount * sizeof(TElem)
+         ); //new TElem[toAssign.fMaxCount];
+@@ -326,14 +326,14 @@
+     if (newMax < minNewMax)
+         newMax = minNewMax;
+ 
++    TElem* newList = (TElem*) malloc
+-    TElem* newList = (TElem*) fMemoryManager->allocate
+     (
+         newMax * sizeof(TElem)
+     ); //new TElem[newMax];
+     for (unsigned int index = 0; index < fCurCount; index++)
+         newList[index] = fElemList[index];
+ 
++    free(fElemList); //delete [] fElemList;
+-    fMemoryManager->deallocate(fElemList); //delete [] fElemList;
+     fElemList = newList;
+     fMaxCount = newMax;
+ }
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/XMLDateTime.hpp
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/XMLDateTime.hpp
+@@ -371,9 +371,9 @@
+     
+         if (fEnd > fBufferMaxLen)
+         {
++            free(fBuffer);
+-            fMemoryManager->deallocate(fBuffer);
+             fBufferMaxLen = fEnd + 8;
++            fBuffer = (XMLCh*) malloc((fBufferMaxLen+1) * sizeof(XMLCh));
+-            fBuffer = (XMLCh*) fMemoryManager->allocate((fBufferMaxLen+1) * sizeof(XMLCh));
+         }
+ 
+         memcpy(fBuffer, aString, (fEnd+1) * sizeof(XMLCh));
+@@ -406,9 +406,9 @@
+     {
+         if (fEnd > fBufferMaxLen)
+         {
++            free(fBuffer);//delete[] fBuffer;
+-            fMemoryManager->deallocate(fBuffer);//delete[] fBuffer;
+             fBufferMaxLen = rhs.fBufferMaxLen;
++            fBuffer = (XMLCh*) malloc((fBufferMaxLen+1) * sizeof(XMLCh));
+-            fBuffer = (XMLCh*) fMemoryManager->allocate((fBufferMaxLen+1) * sizeof(XMLCh));
+         }
+ 
+         memcpy(fBuffer, rhs.fBuffer, (fEnd+1) * sizeof(XMLCh));
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/XMLString.hpp
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/XMLString.hpp
+@@ -1596,7 +1596,7 @@
+     if (toRep)
+     {
+         const unsigned int len = stringLen(toRep);
++        ret = (XMLCh*) malloc((len+1) * sizeof(XMLCh)); //new XMLCh[len + 1];
+-        ret = (XMLCh*) manager->allocate((len+1) * sizeof(XMLCh)); //new XMLCh[len + 1];
+         memcpy(ret, toRep, (len + 1) * sizeof(XMLCh));
+     }
+     return ret;
+reverted:
+--- benchspec/CPU2006/483.xalancbmk/src/xercesc/util/XMemory.hpp
++++ benchspec/CPU2006/483.xalancbmk/src/xercesc/util/XMemory.hpp
+@@ -91,7 +91,10 @@
+       *
+       * @param size The requested memory size
+       */
++    void* operator new(size_t size)
++    {
++        return malloc(size);
++    }
+-    void* operator new(size_t size);
+ 
+ #if defined(XML_VISUALCPP)
+     /**
+@@ -118,14 +121,20 @@
+       * @param size   The requested memory size
+       * @param memMgr An application's memory manager
+       */
++    void* operator new(size_t size, MemoryManager* memMgr)
++    {
++        return malloc(size);
++    }
+-    void* operator new(size_t size, MemoryManager* memMgr);
+ 
+     /**
+       * This method overrides operator delete
+       *
+       * @param p The pointer to the allocated memory
+       */
++    void operator delete(void* p)
++    {
++        free(p);
++    }
+-    void operator delete(void* p);
+ 
+      //The Borland compiler is complaining about duplicate overloading of delete
+ #if !defined(XML_BORLAND)
+@@ -135,7 +144,10 @@
+       * @param p      The pointer to the allocated memory
+       * @param memMgr An application's memory manager 
+       */
++    void operator delete(void* p, MemoryManager* memMgr)
++    {
++        free(p);
++    }
+-    void operator delete(void* p, MemoryManager* memMgr);
+ #endif
+ 
+     //@}
