@@ -13,6 +13,7 @@
 LEGACY=no
 BUILD_PLUGIN=no
 VERSION=`cat VERSION`
+LOWFAT_VERSION=be90b9106a09dde4e9bf9524f002d7db493643eb
 RELEASE_NAME=effectivesan-$VERSION
 BUILD_RELEASE=no
 if [ $# = 1  -a "$1" = "release" ]
@@ -120,16 +121,16 @@ then
 missing!"
     echo -e "${GREEN}$0${OFF}: downloading LowFat.zip from GitHub..."
     wget -O "$LOWFAT_SRC_ZIP" \
-        https://github.com/GJDuck/LowFat/archive/master.zip
+        https://github.com/GJDuck/LowFat/archive/$LOWFAT_VERSION.zip
 fi
 
 echo -e "${GREEN}$0${OFF}: extracting LowFat files..."
-yes | unzip "$LOWFAT_SRC_ZIP" 'LowFat-master/config/*' -d .
+yes | unzip "$LOWFAT_SRC_ZIP" LowFat-$LOWFAT_VERSION'/config/*' -d .
 yes | unzip "$LOWFAT_SRC_ZIP" \
-    'LowFat-master/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/lowfat*' \
+    LowFat-VERSION'/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/lowfat*' \
     -d .
-mv -f LowFat-master/config/ config
-mv -f LowFat-master/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/* \
+mv -f LowFat-$LOWFAT_VERSION/config/ config
+mv -f LowFat-$LOWFAT_VERSION/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/* \
     llvm-4.0.1.src/projects/compiler-rt/lib/effective/.
 
 CMAKE=`which cmake`
