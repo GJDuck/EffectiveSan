@@ -1,6 +1,13 @@
 The Effective Type Sanitizer --- Dynamically Typed C/C++
 ========================================================
 
+EffectiveSan is a compiler tool that automatically inserts dynamic 
+(i.e., runtime) type and bounds checking into C/C++ programs.  The aim of
+EffectiveSan is to detect memory errors and type bugs in arbitrary C/C++ code.
+
+Background
+----------
+
 C and C++ are examples of *statically typed* programming languages, meaning
 that types are checked at compile time and not at runtime.  Furthermore, C
 and C++ are *weakly typed* programming languages that allow the type system
