@@ -347,6 +347,9 @@ Usage
 Installing
 ----------
 
+EffectiveSan releases can be downloaded from here:
+[https://github.com/GJDuck/EffectiveSan/releases](https://github.com/GJDuck/EffectiveSan/releases)
+
 EffectiveSan is implemented as a modified version of `clang`/LLVM for the
 `x86_64`/Linux architecture.  To use, simply extract the distribution into
 your desired location, e.g.:
