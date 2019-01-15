@@ -127,7 +127,7 @@ fi
 echo -e "${GREEN}$0${OFF}: extracting LowFat files..."
 yes | unzip "$LOWFAT_SRC_ZIP" LowFat-$LOWFAT_VERSION'/config/*' -d .
 yes | unzip "$LOWFAT_SRC_ZIP" \
-    LowFat-VERSION'/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/lowfat*' \
+    LowFat-$LOWFAT_VERSION'/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/lowfat*' \
     -d .
 mv -f LowFat-$LOWFAT_VERSION/config/ config
 mv -f LowFat-$LOWFAT_VERSION/llvm-4.0.0.src/projects/compiler-rt/lib/lowfat/* \
