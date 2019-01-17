@@ -10,7 +10,6 @@
 # Copyright (c) 2018 The National University of Singapore.
 # All rights reserved.
 
-LEGACY=no
 BUILD_PLUGIN=no
 VERSION=`cat VERSION`
 LOWFAT_VERSION=be90b9106a09dde4e9bf9524f002d7db493643eb
@@ -36,18 +35,6 @@ build_llvm()
         "$PWD/$CLANGLIB_PATH/lowfat_config.h"
     ln -fs "$PWD/${RUNTIME_PATH}/lowfat.h" \
         "$PWD/$INSTRUMENTATION_PATH/lowfat.h"
-
-    if [ ! -f "$PWD/${RUNTIME_PATH}/CMakeLists.txt" ]
-    then
-        if [ $LEGACY = no ]
-        then
-            ln -fs "$PWD/${RUNTIME_PATH}/CMakeLists.txt.modern" \
-                "$PWD/${RUNTIME_PATH}/CMakeLists.txt"
-        else
-            ln -fs "$PWD/${RUNTIME_PATH}/CMakeLists.txt.legacy" \
-                "$PWD/${RUNTIME_PATH}/CMakeLists.txt"
-        fi
-    fi
 
     BUILD_PATH=$1
     if [ -e $BUILD_PATH ]
@@ -161,34 +148,6 @@ else
 fi
 
 set -e
-
-echo -n -e "${GREEN}$0${OFF}: checking the CPU..."
-if grep ' bmi1' /proc/cpuinfo > /dev/null
-then
-    echo -n "[bmi]"
-else
-    echo
-    echo -e "${GREEN}$0${OFF}: ${YELLOW}warning${OFF}: CPU does not support BMI"
-    LEGACY=yes
-fi
-if grep ' bmi2' /proc/cpuinfo > /dev/null
-then
-    echo -n "[bmi2]"
-else
-    echo
-    echo -e \
-        "${GREEN}$0${OFF}: ${YELLOW}warning${OFF}: CPU does not support BMI2"
-    LEGACY=yes
-fi
-if grep ' abm' /proc/cpuinfo > /dev/null
-then
-    echo "[lzcnt]"
-else
-    echo
-    echo -e \
-        "${GREEN}$0${OFF}: ${YELLOW}warning${OFF}: CPU does not support LZCNT"
-    LEGACY=yes
-fi
 
 echo -e "${GREEN}$0${OFF}: building the LowFat config builder..."
 (cd config; CC=$CLANG CXX=$CLANGXX make >/dev/null)
@@ -314,17 +273,4 @@ echo -e "${BOLD}      \$ cd test${OFF}"
 echo -e "${BOLD}      \$ $PWD/$RELEASE_NAME/bin/clang++ -fsanitize=effective -O2 Example.cpp${OFF}"
 echo -e "${BOLD}      \$ ./a.out${OFF}"
 echo
-
-if [ $LEGACY = yes ]
-then
-    echo "------------------------------------------------------------------"
-    echo -e "${YELLOW}*** LEGACY MODE WARNING ***${OFF}"
-    echo
-    echo "EffectiveSan has been compiled in LEGACY mode for older CPUs."
-    echo "This mode:"
-    echo "    (1) is not officially supported; and"
-    echo "    (2) has some features disabled."
-    echo
-    echo "------------------------------------------------------------------"
-fi
 

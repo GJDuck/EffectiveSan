@@ -9,7 +9,7 @@ set(EFFECTIVE_SOURCES
 
 include_directories(..)
 
-set(EFFECTIVE_CFLAGS -std=gnu99 -m64 -I. -O2 -msse4.2 -msse4.1 -mcmodel=large -DLOWFAT_LINUX -Wno-gnu-empty-initializer -Wno-gnu-flexible-array-initializer -Wno-zero-length-array) 
+set(EFFECTIVE_CFLAGS -std=gnu99 -m64 -I. -O2 -msse4.2 -msse4.1 -mcmodel=large -DLOWFAT_LINUX -Wno-gnu-empty-initializer -Wno-gnu-flexible-array-initializer -Wno-zero-length-array -DLOWFAT_LEGACY=1)
 
 add_compiler_rt_runtime(clang_rt.effective
         STATIC

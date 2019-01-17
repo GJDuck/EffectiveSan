@@ -3012,12 +3012,9 @@ bool X86TargetInfo::initFeatureMap(
   if (getTriple().getArch() == llvm::Triple::x86_64)
     setFeatureEnabledImpl(Features, "sse2", true);
 
-  // EffectiveSan assumes -mbmi -mbmi2 -mlzcnt -msse4.2 -msse4.1
+  // EffectiveSan assumes -msse4.2 -msse4.1
   setFeatureEnabledImpl(Features, "sse4.1", true);
   setFeatureEnabledImpl(Features, "sse4.2", true);
-  setFeatureEnabledImpl(Features, "lzcnt", true);
-  setFeatureEnabledImpl(Features, "bmi", true);
-  setFeatureEnabledImpl(Features, "bmi2", true);
 
   const CPUKind Kind = getCPUKind(CPU);
 
