@@ -946,7 +946,7 @@ static EFFECTIVE_DESTRUCTOR(12399) void effective_report(void)
     fprintf(stderr, "--------------------------------------------------\n");
     fflush(stderr);
 
-    if (effective_abort)
+    if (effective_abort && EFFECTIVE_ERROR_TABLE_NUM_ENTRIES)
       abort();
 }
 
