@@ -229,7 +229,7 @@ EFFECTIVE_HOT EFFECTIVE_BOUNDS effective_get_bounds(const void *ptr)
 EFFECTIVE_HOT void effective_bounds_check(EFFECTIVE_BOUNDS bounds0,
     const void *ptr, intptr_t lb, intptr_t ub)
 {
-    EFFECTIVE_DEBUG(stderr, "effective_bounds_check(%p, %zd..%zd) [%zd..%zd]\n",
+    EFFECTIVE_DEBUG("effective_bounds_check(%p, %zd..%zd) [%zd..%zd]\n",
         ptr, (void *)bounds0[0] - ptr, (void *)bounds0[1] - ptr, lb, ub);
     EFFECTIVE_PROFILE_COUNT(effective_num_bounds_checks);
     EFFECTIVE_BOUNDS ptrs  = {(intptr_t)ptr, (intptr_t)ptr};
