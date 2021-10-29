@@ -410,6 +410,7 @@ several runtime options that can be set via environment variables:
 * `EFFECTIVE_NOLOG=1`: Do not print the log altogether (default off).
 * `EFFECTIVE_SINGLETHREADED=1`: Assume the program is single-threaded
    (default off).
+* `EFFECTIVE_ABORT=1`: Crash the program after printing the error report.
 * `EFFECTIVE_MAXERRS=N`: Abort the program after `N` errors
    (default `SIZE_MAX`).
 * `EFFECTIVE_VERBOSITY=(0|1|2|9)`: Set error verbosity level, where higher
