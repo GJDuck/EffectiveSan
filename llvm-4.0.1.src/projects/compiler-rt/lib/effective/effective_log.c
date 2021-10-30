@@ -277,6 +277,7 @@ size_t effective_num_bad_free_errors = 0;
 static bool effective_no_trace = false;
 static bool effective_no_log = false;
 static bool effective_single_threaded = false;
+static bool effective_abort = false;
 static size_t effective_max_errs = SIZE_MAX;
 
 /*
@@ -525,9 +526,9 @@ void effective_bounds_error(EFFECTIVE_BOUNDS bounds, const void *ptr,
     base = (const void *)(meta + 1);
     ssize_t lb = (bounds[0] - (intptr_t)base);
     ssize_t ub = (bounds[1] - (intptr_t)base);
-    
+
     uint64_t hval = EFFECTIVE_BOUNDS_HASH(t->hash2, lb, ub);
-    
+
     EFFECTIVE_ERROR *error = effective_insert_error(hval);
     if (error == NULL)
         return;
@@ -944,6 +945,9 @@ static EFFECTIVE_DESTRUCTOR(12399) void effective_report(void)
     }
     fprintf(stderr, "--------------------------------------------------\n");
     fflush(stderr);
+
+    if (effective_abort && EFFECTIVE_ERROR_TABLE_NUM_ENTRIES)
+      abort();
 }
 
 /*
@@ -983,6 +987,8 @@ static EFFECTIVE_CONSTRUCTOR(17777) void effective_log_init(void)
         effective_no_log = true;
     if (getenv("EFFECTIVE_SINGLETHREADED") != NULL)
         effective_single_threaded = true;
+    if (getenv("EFFECTIVE_ABORT") != NULL)
+        effective_abort = true;
     const char *max = getenv("EFFECTIVE_MAXERRS");
     size_t tmp;
     if (max != NULL && sscanf(max, "%zu", &tmp) == 1)
@@ -1098,7 +1104,7 @@ static EFFECTIVE_NOINLINE void effective_write_type(EFFECTIVE_STREAM *stream,
     }
     else
         effective_write_string(stream, info->name);
-    
+        
     bool is_anon = false;
     if (strcmp(info->name, "struct ") == 0)
         is_anon = true;
@@ -1353,4 +1359,3 @@ static EFFECTIVE_NOINLINE EFFECTIVE_NORETURN void effective_error(
     va_end(ap);
     abort();
 }
-
