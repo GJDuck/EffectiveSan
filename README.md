@@ -675,6 +675,15 @@ from a `_Rb_tree_node_base` to a `_Rb_tree_node` (a.k.a. `_Link_type`):
 This appears to be "type abuse" rather than an actual bug.  These bad casts are
 also detected by other dynamic type checking tools such as CaVer.
 
+Follow-up Work
+==============
+
+* C. Poncelet et el,
+  [*So Many Fuzzers, So Little Time*](https://doi.org/10.1145/3551349.3556946),
+  ASE 2022,
+  This paper combines EffectiveSan with fuzzing, and found several
+  vulnerabilies in the Contiki-NG Network Stack that were not exposed by ASAN.
+
 Versions
 ========
 
