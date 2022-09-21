@@ -678,7 +678,7 @@ also detected by other dynamic type checking tools such as CaVer.
 Follow-up Work
 ==============
 
-* C. Poncelet et el,
+* C. Poncelet et al.,
   [*So Many Fuzzers, So Little Time*](https://doi.org/10.1145/3551349.3556946),
   ASE 2022,
   This paper combines EffectiveSan with fuzzing, and found several
