@@ -463,6 +463,22 @@ Notes:
   considerable effort.  We do not intend to maintain a stable build at this
   time.
 
+Docker
+-------
+
+It is possible to build and use EffectiveSan over a docker container.
+For this, follow the steps below:
+
+	$ cd docker
+	$ make
+
+This should set up a docker image as "effective-san:latest".
+
+Alternatively, a prebuilt docker image is available on Dockerhub and can be pulled locally as:
+
+	$ docker pull sdphaye/effective-san
+
+
 Features
 ========
 
