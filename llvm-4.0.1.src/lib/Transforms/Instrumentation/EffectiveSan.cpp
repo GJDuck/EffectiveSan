@@ -3018,9 +3018,9 @@ static const BoundsEntry &calculateBounds(llvm::Module &M, llvm::Function &F,
         {
             auto *GEPOp = llvm::dyn_cast<llvm::GEPOperator>(CE);
             InsertPoint IP = nextInsertPoint(F, Ptr);
-            auto [Bounds1, lb1, ub1] = calculateBoundsGEP(M, F, GEPOp, IP,
+            BoundsEntry Entry = calculateBoundsGEP(M, F, GEPOp, IP,
                 tInfo, cInfo, bInfo);
-            Bounds = Bounds1; lb = lb1; ub = ub1;
+            Bounds = Entry.Bounds; lb = Entry.lb; ub = Entry.ub;
             break;
         }
         case llvm::Instruction::BitCast:
@@ -3105,9 +3105,9 @@ static const BoundsEntry &calculateBounds(llvm::Module &M, llvm::Function &F,
     {
         auto *GEPOp = llvm::dyn_cast<llvm::GEPOperator>(GEP);
         InsertPoint IP = nextInsertPoint(F, Ptr);
-        auto [Bounds1, lb1, ub1] = calculateBoundsGEP(M, F, GEPOp, IP, tInfo,
+        BoundsEntry Entry = calculateBoundsGEP(M, F, GEPOp, IP, tInfo,
             cInfo, bInfo);
-        Bounds = Bounds1; lb = lb1; ub = ub1;
+        Bounds = Entry.Bounds; lb = Entry.lb; ub = Entry.ub;
     }
     else if (auto *Cast = llvm::dyn_cast<llvm::BitCastInst>(Ptr))
     {
@@ -4402,7 +4402,8 @@ struct EffectiveSan : public llvm::ModulePass
             llvm::ConstantInt::get(llvm::Type::getInt64Ty(Cxt), 0)}));
         EmptyEntry = llvm::ConstantStruct::get(EntryTy, Elems);
         ObjMetaTy = llvm::StructType::get(Cxt, /*isPacked=*/true);
-        ObjMetaTy->setName("EFFECTIVE_META");
+	if (!ObjMetaTyy->isLiteral())
+            ObjMetaTy->setName("EFFECTIVE_META");
         Fields.clear();
         Fields.push_back(TypeTy->getPointerTo());           /* type */
         Fields.push_back(llvm::Type::getInt64Ty(Cxt));      /* size */

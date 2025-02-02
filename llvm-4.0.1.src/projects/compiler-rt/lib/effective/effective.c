@@ -41,7 +41,7 @@ EFFECTIVE_BOUNDS effective_bounds_narrow(EFFECTIVE_BOUNDS bounds1,
     EFFECTIVE_BOUNDS cmp = (bounds1 > bounds2);
     cmp ^= EFFECTIVE_BOUNDS_NEG_1_0;
     EFFECTIVE_BOUNDS bounds3 =
-        __builtin_ia32_pblendvb128(bounds1, bounds2, cmp);
+	__builtin_ia32_pblendvb128((EFFECTIVE_BOUNDS2)bounds1, (EFFECTIVE_BOUNDS2)bounds2, (EFFECTIVE_BOUNDS2)cmp);
     return bounds3;
 }
 
@@ -236,7 +236,7 @@ EFFECTIVE_HOT void effective_bounds_check(EFFECTIVE_BOUNDS bounds0,
     EFFECTIVE_BOUNDS sizes = {lb+1, ub};
     EFFECTIVE_BOUNDS bounds = bounds0 - sizes;
     EFFECTIVE_BOUNDS cmp = (ptrs > bounds);
-    int mask = __builtin_ia32_pmovmskb128(cmp);
+    int mask = __builtin_ia32_pmovmskb128((EFFECTIVE_BOUNDS2)cmp);
     if (EFFECTIVE_UNLIKELY(mask != 0x00FF))
     {
         size_t size = sizes[1] - sizes[0] + 1;
